@@ -1,0 +1,635 @@
+---
+title: "Fast Univariate Inference under Survey Design"
+format: 
+  html:
+    code-fold: true
+execute:
+  warning: false
+  echo: true
+bibliography: references.bib
+---
+
+------------------------------------------------------------------------
+
+## What We Have Done
+
+1.  **FUI Analysis on NHATS Data**:
+
+    -   Explored the association between diurnal physical activity and covariates using Fast univariate inference proposed by Erjia [@cui2022].
+
+2.  **NHATS introduction and motivation**
+
+    -   **Processed NHATS Round 11 and 12 accelerometry data:**
+        -   Extracted weights, PSUs, and strata from survey design variables.
+        -   Designed survey objects:
+            -   Single Observation: Incorporated strata, PSU, and weights to reduce bias.
+            -   Multiple Observations: Used weights only due to limitations in multi-stage sampling probabilities.
+    -   **NHATS (Round 11 and 12)** provides accelerometry data for a nationally representative sample of Medicare beneficiaries aged 71 and older.
+
+3.  **Implementation of Weighted Functional Univariate Inference**:
+
+    -   **Framework Development:** Extended the Fast Univariate Inference (FUI) framework proposed by Erjia et al. to accommodate complex survey designs.
+
+    -   **Two scenarios:**
+
+        -   **Single Observation**: No random effects, analyzed using `svyglm` [@svylme]
+
+        -   **Multiple Observations**: Includes random effects, analyzed using `svy2lme` [@lumley2023]
+
+            -   **Notes:** For `svy2lme`, separate probabilities or weights for each stage of sampling are required. However, NHATS does not provide such detailed information. Therefore, we only utilized available weights for the analysis.
+
+            -   As a comparison, **WeMix** (Weighted Mixed Effects Model) was explored as it similarly handles weighted linear mixed effects models.
+
+4.  **Three-Step Inferential Procedures**:
+
+    1.  **Point-wise Model Fitting**:
+
+        -   Fit separate models at each location $s_l \in S$:
+            -   Single observation: Used `svyglm` to include strata, PSU, and weights
+            -   Multiple observations: Used `svy2lme` to include weights (no strata/PSU due to data limitations)
+        -   **Extended bootstrap methods:**
+            -   Current methods include:
+                -   Rao-Wu-Yue-Beaumont Bootstrap
+                -   Non-parametric Bootstrap
+                -   Preston Bootstrap
+                -   Finite Population Bootstrap (FPB)
+            -   Planned addition: Unified Bootstrap for stratified cluster sampling [@wang2022]
+                -   The code is not publicly available. But the original code has been obtained from the author. You can contact me if needed.
+
+    2.  **Smoothing Along the Functional Domain**:
+
+        -   Applied penalized splines to obtain smooth estimates of functional coefficients:
+            -   Used `mgcv::gam` to smooth fixed effect estimates $\beta(s)$ along the domain.
+
+    3.  **Joint Confidence Bands (JCB)**:
+
+        -   Applied fPCA to analyze variance structure of Bootstrap samples.
+        -   Used Supremum Norm to derive critical values and construct JCBs.
+
+5.  **Simulation summary**:
+
+    -   **Single Point Simulations:** Verify the combination between LMER/svy2lme and RWYB bootstap
+
+        -   [Simple Random Sampling (SRS)]{.underline}: Data generated without stratification or clustering; weights are uniform across all observations
+
+        -   [Stratified Multi-Stage Sampling]{.underline}: Incorporates strata, PSUs per stratum, and varying weights to simulate real-world survey designs
+
+        -   [Complex Design-Dependent Covariates]{.underline}: Covariates and weights depend explicitly on strata and PSU structures, modeling real-world sampling complexities.
+
+        -   **Preliminary Results**
+            -   RWYB Bootstrap achieves the most consistent coverage across all scenarios.
+            -   Non-Parametric Bootstrap is faster but underperforms in complex designs.
+
+    -   **\[Current Work\] Functional Domain Simulations**
+
+        -   Single-level functional data
+        -   Multi-level functional data
+
+# Analysis Examples (for NHATS)
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+library(here)
+library(devtools)
+library(fastFMM)
+library(readxl)
+library(readr)
+library(haven)
+library(dplyr)
+library(survey)
+library(svrep)
+library(progress)
+library(svylme)
+library(lme4)
+library(mgcv)
+library(WeMix)
+library(ggplot2)
+library(gridExtra)
+
+source('wFUI.R')
+source('functions.R')
+source('plot_fui_ci.R')
+```
+
+#### NHATS data loading (100 subjects)
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+## NHATS minute-level Actigraph data
+# dat.raw = read_dta(here('data/NHATS_Round_11_Accel_Det_File.dta'))
+# colnames(dat.raw) = sub('ag11dmean', '', colnames(dat.raw))
+# dat = dat.raw |>
+#   rename(subjectid = spid)
+# colnames(dat)[5:1444] = sub("min", 'Y.', colnames(dat)[5:1444])
+# 
+# ## Sample Design
+# dat.cov = read.csv(here('data/NHATS_Round_11_Accel_30Min_Covariates_Weights.csv')) |>
+#   dplyr::select(-age, -gender, -race) |>
+#   dplyr::rename(subjectid = spid,
+#          race = rl5dracehisp,
+#          gender = r5dgender,
+#          age = r11d2intvrage) |>
+#   dplyr::select(subjectid, gender, race, age, 
+#          w11anfinwgt0, w11varstrat, w11varunit) |>
+#   dplyr::rename(weight = w11anfinwgt0,
+#                 psu = w11varunit,
+#                 strata = w11varstrat)
+#     # weight w#anfinwgt0; 
+#     # cluster w#varunit; (=psu)
+#     # strata w#varstrat;
+# 
+# ## Data with Multiple Observations
+# dat.m = merge(dat, dat.cov)
+# 
+# ## Data with Single Observation
+# y_columns <- grep("Y.", names(dat), value = TRUE)
+# dat.fixed = dat %>%
+#   group_by(subjectid) %>%
+#   summarise(across(all_of(y_columns), mean, na.rm = TRUE))
+# dat.s = merge(dat.fixed, dat.cov)
+# 
+# ## Save Data
+# write_rds(dat.m, here('data', 'NHATS_multiple_obs.rds'))
+# write_rds(dat.s, here('data', 'NHATS_single_obs.rds'))
+```
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+dat.m = read_rds(here('data', 'NHATS_multiple_obs.rds')) |>
+  rename(psu = PSU)
+dat.s = read_rds(here('data', 'NHATS_single_obs.rds'))
+```
+
+## Single Obs (survey design, no random effects)
+
+### Non-parametric bootstrap
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+# dat.tmp = read_rds(here('data', 'NHATS_single_obs.rds')) |>
+#   filter(subjectid %in% dat.s$subjectid[1:100]) |>
+#   rename(psu = PSU)
+# Y_mat <- dat.tmp[, grepl('Y.', colnames(dat.tmp))]
+# dat.fit <- data.frame(Y = Y_mat, 
+#                       dat.tmp[,!grepl('Y.', colnames(dat.tmp))])
+# formula.FUI = as.formula(paste0('Y~', 'gender'))
+# 
+# mod.0 <- fui.weight(formula.FUI,
+#              analytic = FALSE,
+#              argvals = seq(from = 1, to = 1440, by = 30),
+#              num_boots = 100,
+#              boot_type = 'ref_design',
+#              weighted = TRUE,
+#              random = FALSE,
+#              nknots_min = 10,
+#              data = dat.fit)
+# 
+# export.0 = plot_fui(fuiobj = mod.0,
+#          align_x = 1,
+#          y_scal_orig = 0.01,
+#          x_rescale = 60,
+#          return = TRUE)
+# 
+# write_rds(export.0, here('data', 'mod.0.rds'))
+export.0 = read_rds(here('data', 'mod.0.rds'))
+
+fig.0.int = plot_fui_ci(export.0$`(Intercept)`,
+            cross_interval = FALSE,
+            label = 'Intercept',
+            sublabel = 'survey design, no random effects',
+            ylim = c(-200, 2000),
+            yinterval = 400)
+
+fig.0.gender = plot_fui_ci(export.0$`gender2 FEMALE`,
+                           cross_interval = FALSE,
+                           label = 'Gender (Female)',
+                           sublabel = 'survey design, no random effects',
+                           ylim = c(-650, 650),
+                           yinterval = 200)
+
+grid.arrange(fig.0.int, fig.0.gender, ncol = 2)
+```
+
+### Rao-Wu-Yue-Beaumont
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+# dat.tmp = read_rds(here('data', 'NHATS_single_obs.rds')) |>
+#   filter(subjectid %in% dat.s$subjectid[1:100]) |>
+#   rename(psu = PSU)
+# Y_mat <- dat.tmp[, grepl('Y.', colnames(dat.tmp))]
+# dat.fit <- data.frame(Y = Y_mat, 
+#                       dat.tmp[,!grepl('Y.', colnames(dat.tmp))])
+# formula.FUI = as.formula(paste0('Y~', 'gender'))
+# 
+# mod.3 <- fui.weight(formula = formula.FUI,
+#              analytic = FALSE,
+#              argvals = seq(from = 1, to = 1440, by = 30),
+#              weighted = TRUE,
+#              random = FALSE,
+#              boot_type = 'Rao-Wu-Yue-Beaumont',
+#              num_boots = 100,
+#              nknots_min = 5,
+#              data = dat.fit)
+# 
+# plot_fui(mod.3)
+# 
+# # Visualization
+# export.3 = plot_fui(fuiobj = mod.3,
+#          align_x = 1,
+#          y_scal_orig = 0.01,
+#          x_rescale = 60,
+#          return = TRUE)
+# 
+# write_rds(export.3, here('data', 'mod.3.rds'))
+export.3 = read_rds(here('data', 'mod.3.rds'))
+
+fig.3.int = plot_fui_ci(export.3$`(Intercept)`,
+            cross_interval = FALSE,
+            label = 'Intercept',
+            sublabel = 'no survey design, random effects',
+            ylim = c(-200, 2000),
+            yinterval = 400)
+
+fig.3.gender = plot_fui_ci(export.3$`gender2 FEMALE`,
+                           cross_interval = FALSE,
+                           label = 'Gender (Female)',
+                           sublabel = 'no survey design, random effects',
+                           ylim = c(-600, 600),
+                           yinterval = 200)
+
+grid.arrange(fig.3.int, fig.3.gender, ncol = 2)
+```
+
+## Single Obs (no survey design, no random effects)
+
+### Non-parametric bootstrap
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+# dat.tmp = read_rds(here('data', 'NHATS_single_obs.rds')) |>
+#   filter(subjectid %in% dat.s$subjectid[1:100]) |>
+#   rename(psu = PSU)
+# Y_mat <- dat.tmp[, grepl('Y.', colnames(dat.tmp))]
+# dat.fit <- data.frame(Y = Y_mat, 
+#                       dat.tmp[,!grepl('Y.', colnames(dat.tmp))])
+# formula.FUI = as.formula(paste0('Y~', 'gender'))
+# 
+# mod.1 <- fui.weight(formula = formula.FUI,
+#              analytic = FALSE,
+#              argvals = seq(from = 1, to = 1440, by = 30),
+#              weighted = FALSE,
+#              random = FALSE,
+#              boot_type = 'ref_noDesign',
+#              num_boots = 100,
+#              nknots_min = 5,
+#              data = dat.fit)
+# 
+# export.1 = plot_fui(fuiobj = mod.1,
+#          align_x = 1,
+#          y_scal_orig = 0.01,
+#          x_rescale = 60,
+#          return = TRUE)
+# 
+# write_rds(export.1, here('data', 'mod.1.rds'))
+export.1 = read_rds(here('data', 'mod.1.rds'))
+
+fig.1.int = plot_fui_ci(export.1$`(Intercept)`,
+            cross_interval = FALSE,
+            label = 'Intercept',
+            sublabel = 'no survey design, no random effects',
+            ylim = c(-200, 2000),
+            yinterval = 400)
+
+fig.1.gender = plot_fui_ci(export.1$`gender2 FEMALE`,
+                           cross_interval = FALSE,
+                           label = 'Gender (Female)',
+                           sublabel = 'no survey design, no random effects',
+                           ylim = c(-600, 600),
+                           yinterval = 200)
+
+grid.arrange(fig.1.int, fig.1.gender, ncol = 2)
+```
+
+## Multiple Obs (no survey design, random effects)
+
+### Semiparametric bootstrap
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+# dat.tmp = dat.m |>
+#   filter(subjectid %in% dat.s$subjectid[1:100])
+# Y_mat <- dat.tmp[, grepl('Y.', colnames(dat.tmp))]
+# dat.fit <- data.frame(Y = Y_mat, 
+#                       dat.tmp[,!grepl('Y.', colnames(dat.tmp))])
+# 
+# formula.FUI = as.formula(paste0('Y~gender+', '(1 | subjectid)'))
+# 
+# mod.2 <- fui.weight(formula.FUI,
+#              analytic = FALSE,
+#              argvals = seq(from = 1, to = 1440, by = 30),
+#              num_boots = 100,
+#              num_cores = 10,
+#              weighted = FALSE,
+#              random = TRUE,
+#              boot_type = 'semiparametric',
+#              nknots_min = 5,
+#              data = dat.fit)
+# 
+
+
+# Visualization
+# export.2 = plot_fui(fuiobj = mod.2,
+#          align_x = 1,
+#          y_scal_orig = 0.01,
+#          x_rescale = 60,
+#          return = TRUE)
+# write_rds(export.2, here('data', 'mod.2.rds'))
+export.2 = read_rds(here('data', 'mod.2.rds'))
+
+fig.2.int = plot_fui_ci(export.2$`(Intercept)`,
+            cross_interval = FALSE,
+            label = 'Intercept',
+            sublabel = 'no survey design, random effects',
+            ylim = c(-200, 2000),
+            yinterval = 400)
+
+fig.2.gender = plot_fui_ci(export.2$`gender2 FEMALE`,
+                           cross_interval = FALSE,
+                           label = 'Gender (Female)',
+                           sublabel = 'no survey design, random effects',
+                           ylim = c(-600, 600),
+                           yinterval = 200)
+
+grid.arrange(fig.2.int, fig.2.gender, ncol = 2)
+```
+
+## Multiple Obs (survey design, random effects)
+
+### Rao-Wu-Yue-Beaumont
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+# dat.tmp = read_rds(here('data', 'NHATS_multiple_obs.rds')) |>
+#   filter(subjectid %in% dat.s$subjectid[1:100]) |>
+#   rename(psu = PSU)
+# Y_mat <- dat.tmp[, grepl('Y.', colnames(dat.tmp))]
+# dat.fit <- data.frame(Y = Y_mat, 
+#                       dat.tmp[,!grepl('Y.', colnames(dat.tmp))])
+# formula.FUI = as.formula(paste0('Y~gender+', '(1 | subjectid)'))
+# 
+# mod.4 <- fui.weight(formula.FUI,
+#              analytic = FALSE,
+#              argvals = seq(from = 1, to = 1440, by = 30),
+#              num_boots = 100,
+#              boot_type = 'Rao-Wu-Yue-Beaumont',
+#              weighted = TRUE,
+#              random = TRUE,
+#              nknots_min = 5,
+#              data = dat.fit)
+# 
+# # Visualization
+# export.4 = plot_fui(fuiobj = mod.4,
+#          align_x = 1,
+#          y_scal_orig = 0.01,
+#          x_rescale = 60,
+#          return = TRUE)
+# 
+# write_rds(export.4, here('data', 'mod.4.rds'))
+export.4 = read_rds(here('data', 'mod.4.rds'))
+
+fig.4.int = plot_fui_ci(export.4$`(Intercept)`,
+            cross_interval = FALSE,
+            label = 'Intercept',
+            sublabel = 'survey design, random effects',
+            ylim = c(-200, 2000),
+            yinterval = 400)
+
+fig.4.gender = plot_fui_ci(export.4$`gender2 FEMALE`,
+                           cross_interval = FALSE,
+                           label = 'Gender (Female)',
+                           sublabel = 'survey design, random effects',
+                           ylim = c(-600, 650),
+                           yinterval = 200)
+
+grid.arrange(fig.4.int, fig.4.gender, ncol = 2)
+```
+
+### Preston bootstrap
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+# dat.tmp = read_rds(here('data', 'NHATS_multiple_obs.rds')) |>
+#   filter(subjectid %in% dat.s$subjectid[1:100]) |>
+#   rename(psu = PSU)
+# Y_mat <- dat.tmp[, grepl('Y.', colnames(dat.tmp))]
+# dat.fit <- data.frame(Y = Y_mat, 
+#                       dat.tmp[,!grepl('Y.', colnames(dat.tmp))])
+# formula.FUI = as.formula(paste0('Y~gender+', '(1 | subjectid)'))
+# 
+# mod.5 <- fui.weight(formula.FUI,
+#              analytic = FALSE,
+#              argvals = seq(from = 1, to = 1440, by = 30),
+#              num_boots = 100,
+#              boot_type = 'Preston',
+#              weighted = TRUE,
+#              random = TRUE,
+#              nknots_min = 5,
+#              data = dat.fit)
+# 
+# # Visualization
+# export.5 = plot_fui(fuiobj = mod.5,
+#          align_x = 1,
+#          y_scal_orig = 0.01,
+#          x_rescale = 60,
+#          return = TRUE)
+# 
+# write_rds(export.5, here('data', 'mod.5.rds'))
+export.5 = read_rds(here('data', 'mod.5.rds'))
+
+fig.5.int = plot_fui_ci(export.5$`(Intercept)`,
+            cross_interval = FALSE,
+            label = 'Intercept',
+            sublabel = 'survey design, random effects',
+            ylim = c(-200, 2000),
+            yinterval = 400)
+
+fig.5.gender = plot_fui_ci(export.5$`gender2 FEMALE`,
+                           cross_interval = FALSE,
+                           label = 'Gender (Female)',
+                           sublabel = 'survey design, random effects',
+                           ylim = c(-600, 650),
+                           yinterval = 200)
+
+grid.arrange(fig.5.int, fig.5.gender, ncol = 2)
+```
+
+# 03.Results Comparision
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+export.0[[2]]$type = 'Single+Weighted (Incorrectly define design)'
+export.1[[2]]$type = 'Single+NonWeighted (Non-parametric)'
+export.2[[2]]$type = 'Multiple+Weighted'
+export.3[[2]]$type = 'Single+Weighted (RWYB)'
+export.4[[2]]$type = 'Multiple+Weighted (RWYB)'
+export.5[[2]]$type = 'Multiple+Weighted (Preston)'
+
+combined_export <- bind_rows(export.0[[2]], export.1[[2]], export.2[[2]], 
+                             export.3[[2]], export.4[[2]], export.5[[2]])
+combined_export$type = as.factor(combined_export$type)
+
+dat = combined_export
+colnames(dat) = c('time', 'beta',
+                    'lower.pointwise', 'upper.pointwise',
+                    'lower.joint', 'upper.joint', 'type')
+
+dat$joint.sig = ifelse(sign(dat$lower.joint) == sign(dat$upper.joint), 1,0)
+dat$point.sig = ifelse(sign(dat$lower.pointwise) == sign(dat$upper.pointwise), 1,0)
+dat$label.sig = ifelse(dat$joint.sig == 1, 2, dat$point.sig)
+```
+
+## Point Esitimate
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+library(RColorBrewer)
+
+cbd.1 = ggplot(dat, aes(x = time / 60, y = beta, color = type, group = type)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_line(size = 1) +  
+  scale_x_continuous(
+    breaks = c(1, 6, 12, 18, 23),
+    labels = function(x) paste0(sprintf("%02d", x), ":00")
+  ) +
+  scale_color_brewer(palette = "Set2") +
+  labs(title = 'Summarized Results',
+       x = "Time (hour)", y = 'Physical Intensity (count/min)',
+       color = "Type") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_line(color = "gray90", size = 0.2),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+print(cbd.1)
+```
+
+## Point Esitimate + 95% point-wise CI
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+cbd.2 = ggplot(dat, aes(x = time / 60, y = beta, color = type, group = type)) +
+  # geom_ribbon(aes(ymin = lower.joint, ymax = upper.joint, fill = type), 
+  #             alpha = 0.3, color = NA) +  # Joint CI
+  
+  geom_ribbon(aes(ymin = lower.pointwise, ymax = upper.pointwise, fill = type),
+              alpha = 0.3, color = NA) +  # Pointwise CI
+  
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  
+  geom_line(size = 1) +
+  
+  scale_color_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Set1") + 
+  scale_x_continuous(
+    breaks = c(1, 6, 12, 18, 23),
+    labels = function(x) paste0(sprintf("%02d", x), ":00")
+  ) +
+  labs(title = 'Summarized Results (Include CI)',
+       x = "Time (hour)", 
+       y = 'Physical Intensity (count/min)',
+       color = "Type", fill = "Type") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_line(color = "gray90", size = 0.2),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+print(cbd.2)
+```
+
+## Point Esitimate + 95% joint-wise CI
+
+```{r}
+cbd.3 = ggplot(dat, aes(x = time / 60, y = beta, color = type, group = type)) +
+  geom_ribbon(aes(ymin = lower.joint, ymax = upper.joint, fill = type), 
+              alpha = 0.3, color = NA) +  # Joint CI
+  
+  # geom_ribbon(aes(ymin = lower.pointwise, ymax = upper.pointwise, fill = type), 
+  #             alpha = 0.3, color = NA) +  # Pointwise CI
+  
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  
+  geom_line(size = 1) +
+  
+  scale_color_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Set1") + 
+  scale_x_continuous(
+    breaks = c(1, 6, 12, 18, 23),
+    labels = function(x) paste0(sprintf("%02d", x), ":00")
+  ) +
+  labs(title = 'Summarized Results (Include CI)',
+       x = "Time (hour)", 
+       y = 'Physical Intensity (count/min)',
+       color = "Type", fill = "Type") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_line(color = "gray90", size = 0.2),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+print(cbd.3)
+```
+
+------------------------------------------------------------------------
+
+## What We Plan to Do Next
+
+1.  **Refinement of Functions** (December 2024 - January 2025):
+    -   Improve current integration for single/multiple observations under various bootstrap methods.
+
+    -   Incorporate the Unified Bootstrap method [@wang2022]
+
+-   **Simulation Studies** (January - February 2025):
+
+    -   Evaluate methods under different survey designs.
+
+    -   Compare point-wise CI and JCB performance.
+
+-   **Package Development & Manuscript Preparation** (February - March 2025):
+
+    -   Package the functions for broader applications.
+
+    -   Document findings and draft a manuscript.
+
+-   **Thesis Submission** (April - May 2025):
+
+    -   Finalize thesis incorporating NHATS analyses and simulation results.
+
+------------------------------------------------------------------------
+
+### NHATS Round 11 Study Design
+
+The National Health and Aging Trends Study (NHATS) provides nationally representative data on physical activity patterns for Medicare beneficiaries aged 71 and older.
+
+#### Accelerometry Subsample Design:
+
+-   Initial Sample: 1,000 participants from Round 9 were flagged for accelerometry.
+
+-   Eligible Sample:
+
+    -   872 participants were eligible to wear the device.
+    -   747 (86%) returned valid accelerometry data.
+
+#### Data Collection:
+
+-   Device: Actigraph CentrePoint Insight; Participants wore the device on their non-dominant wrist for 7 consecutive days (24 hours/day).
+-   Processing: Raw accelerometry data were processed using the `ARCTOOLS` package.
+
+#### Complex Survey Features:
+
+-   Stratification (Stratum): `w11agvarstrat`.
+-   Clustering (PSU): `w11agvarunit`
+-   Full Sample Weights: `w11agfinwgt0` ensure unbiased population-level estimates.
+    -   The full sample weight is for accelerometer data, which is adjusted for sampling probability and post-stratification
+
+------------------------------------------------------------------------
+
+## References:
