@@ -10,82 +10,85 @@ parallel = TRUE
 
 ncores = parallelly::availableCores() - 1
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'no_design')
-
+options(survey.lonely.psu = "adjust")
 sim_res <- list() ## store simulation results
 for(iter in 1:nsim) {
   set.seed(iter + 1)
-  data <- simulate_survey_fosr(I = 10000, ## number of subjects in population
-                               L = 50, ## dimension of the functional domain
-                               SNR_sigma = 1,
-                               I_n = 50, # subjects in each psu-strata combination
-                               alpha = 2, # number PSU
-                               num_strata = 30)
+  x = try({
+    data <- simulate_survey_fosr(I = 10000, ## number of subjects in population
+                                 L = 50, ## dimension of the functional domain
+                                 SNR_sigma = 1,
+                                 I_n = 50, # subjects in each psu-strata combination
+                                 alpha = 2, # number PSU
+                                 num_strata = 30)
 
-  ## pre-process simulated data
-  Y_mat <- data[, grepl('Y.', colnames(data))]
-  dat.fit <- data.frame(Y = Y_mat, data[, !grepl('Y.', colnames(data))])
-  model_formula = as.formula(paste0('Y~', 'X'))
-  out_index <- grep(paste0("^", model_formula[2]), names(data))
+    ## pre-process simulated data
+    Y_mat <- data[, grepl('Y.', colnames(data))]
+    dat.fit <- data.frame(Y = Y_mat, data[, !grepl('Y.', colnames(data))])
+    model_formula = as.formula(paste0('Y~', 'X'))
+    out_index <- grep(paste0("^", model_formula[2]), names(data))
 
 
-  betaTilde = get_betatilde(data)
-  betaHat = get_betahat(betaTilde)
+    betaTilde = get_betatilde(data)
+    betaHat = get_betahat(betaTilde)
 
-  if (parallel) {
-    plan(multisession, workers = ncores)
-    res = future_map(
-      .x = boot_types,
-      .f = run_boots,
-      data = data,
-      betaHat = betaHat,
-      num_boots = B,
-      set_seed = TRUE,
-      seed = 2025,
-      L = 50,
-      out_index = out_index
-    )
+    if (parallel) {
+      plan(multisession, workers = ncores)
+      res = future_map(
+        .x = boot_types,
+        .f = run_boots,
+        data = data,
+        betaHat = betaHat,
+        num_boots = B,
+        set_seed = TRUE,
+        seed = 2025,
+        L = 50,
+        out_index = out_index
+      )
 
-    cis = future_map(.x = res,
-                     .f = get_cis,
-                     betaHat = betaHat,
-                     .options=furrr_options(seed = TRUE))
-    plan(sequential)
-  } else{
-    res = map(
-      .x = boot_types,
-      .f = run_boots,
-      data = data,
-      betaHat = betaHat,
-      num_boots = B,
-      set_seed = TRUE,
-      seed = 2025,
-      L = 50,
-      out_index = out_index
-    )
+      cis = future_map(.x = res,
+                       .f = get_cis,
+                       betaHat = betaHat,
+                       .options=furrr_options(seed = TRUE))
+      plan(sequential)
+    } else{
+      res = map(
+        .x = boot_types,
+        .f = run_boots,
+        data = data,
+        betaHat = betaHat,
+        num_boots = B,
+        set_seed = TRUE,
+        seed = 2025,
+        L = 50,
+        out_index = out_index
+      )
 
-    cis = map(.x = res,
-              .f = get_cis,
-              betaHat = betaHat,
-              .progress = TRUE)
-  }
+      cis = map(.x = res,
+                .f = get_cis,
+                betaHat = betaHat,
+                .progress = TRUE)
+    }
 
-  stats = map2(
-    .x = cis,
-    .y = boot_types,
-    .f = get_coverage_stats,
-    beta_true = beta_true
-  ) %>%
-    list_rbind() %>%
-    mutate(n = nrow(data),
-           n_boot = B)
+    stats = map2(
+      .x = cis,
+      .y = boot_types,
+      .f = get_coverage_stats,
+      beta_true = beta_true
+    ) %>%
+      list_rbind() %>%
+      mutate(n = nrow(data),
+             n_boot = B)
 
-  sim_res[[iter]] <- stats
-  rm(stats)
-  rm(data)
+    sim_res[[iter]] <- stats
+  })
+  rm(x)
+  print(iter)
 }
 
 result =
   sim_res %>%
+  keep(., is.data.frame) %>%
   list_rbind(names_to = "id")
 
 if(!dir.exists(here::here("results", "simulations"))){
