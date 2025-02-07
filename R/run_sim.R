@@ -76,13 +76,26 @@ for(iter in 1:nsim) {
     beta_true = beta_true
   ) %>%
     list_rbind() %>%
-    mutate(n = nrow(data))
+    mutate(n = nrow(data),
+           n_boot = B)
 
   sim_res[[iter]] <- stats
   rm(stats)
   rm(data)
 }
 
+result =
+  sim_res %>%
+  list_rbind(names_to = "id")
+
+if(!dir.exists(here::here("results", "simulations"))){
+  dir.create(here::here("results", "simulations"), recursive = TRUE)
+}
+
+
+fname = paste0("sim_B", B, "_nsim", nsim, ".rds")
+
+write_rds(result, here::here("results", "simulations", fname))
 
 
 #
