@@ -104,7 +104,7 @@ simulate_survey_fosr <- function(I = 10e6, # total population,
       Y_obs[i, j] <- rnorm(1, mean = true_fixef_sample[i, j], sd = SNR_sigma / 5)
     }
   }
-  Y_obs <- Y_obs + with(dat.sim, rnorm(alpha, sd = SNR_sigma / 10)[psu]) # not sure if we want to do this part?
+  # Y_obs <- Y_obs + with(dat.sim, rnorm(alpha, sd = SNR_sigma / 10)[psu]) # not sure if we want to do this part?
 
   # Y_obs2 <- matrix(rnorm(nrow(true_fixef_sample) * L,
   #                       mean = as.vector(true_fixef_sample),
