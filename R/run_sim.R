@@ -1,18 +1,25 @@
-source(here::here("R", "00_data_gen_function.R"))
-source(here::here("R", "01_sim_functions.R"))
-nsim <- 1
-B <- 500
-parallel = TRUE
 library(future)
 library(furrr)
-ncores = parallel::detectCores() - 1
+library(tidyverse)
+
+source(here::here("R", "00_data_gen_function.R"))
+source(here::here("R", "01_sim_functions.R"))
+nsim <- 100
+B <- 500
+parallel = TRUE
+
+ncores = parallelly::availableCores() - 1
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'no_design')
 
 sim_res <- list() ## store simulation results
 for(iter in 1:nsim) {
-  # iter = 1
-  set.seed(iter)
-  data <- simulate_survey_fosr()
+  set.seed(iter + 1)
+  data <- simulate_survey_fosr(I = 10000, ## number of subjects in population
+                               L = 50, ## dimension of the functional domain
+                               SNR_sigma = 1,
+                               I_n = 50, # subjects in each psu-strata combination
+                               alpha = 2, # number PSU
+                               num_strata = 30)
 
   ## pre-process simulated data
   Y_mat <- data[, grepl('Y.', colnames(data))]
@@ -40,7 +47,8 @@ for(iter in 1:nsim) {
 
     cis = future_map(.x = res,
                      .f = get_cis,
-                     betaHat = betaHat)
+                     betaHat = betaHat,
+                     .options=furrr_options(seed = TRUE))
     plan(sequential)
   } else{
     res = map(
