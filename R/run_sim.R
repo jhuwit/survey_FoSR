@@ -1,6 +1,6 @@
-source(here::here("R", "data_gen_function.R"))
-source(here::here("R", "sim_functions.R"))
-nsim <- 100
+source(here::here("R", "00_data_gen_function.R"))
+source(here::here("R", "01_sim_functions.R"))
+nsim <- 1
 B <- 500
 parallel = TRUE
 library(future)
