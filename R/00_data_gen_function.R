@@ -41,8 +41,7 @@ if(scenario == 1){
 }
 rownames(beta_true) <- c("Intercept", "x")
 
-
-seed = 200
+# do we need to set seed anywhere?
 
 simulate_survey_fosr <- function(I = 10e6, # total population,
                                  I_n = 50, # subjects in each psu-strata combination
@@ -56,7 +55,6 @@ simulate_survey_fosr <- function(I = 10e6, # total population,
 
   # Generate strata sizes using a Dirichlet distribution
   dirichlet_probs = gtools::rdirichlet(1, rep(1, num_strata))
-  set.seed(seed)
   stratum_assignments = sample(1:num_strata, size = I, replace = TRUE, prob = dirichlet_probs)
   p_strata = table(stratum_assignments) / sum(table(stratum_assignments))
   p_strata = c(p_strata) %>% unname()
