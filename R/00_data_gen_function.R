@@ -21,8 +21,7 @@ library(gridExtra)
 
 invisible(lapply(required_packages, install_and_load))
 
-# Generate Population Data
-I <- 10000 ## number of subjects
+
 L <- 50 ## dimension of the functional domain
 SNR_sigma = 1
 family <- "gaussian" ## family of longitudinal functional data
@@ -41,17 +40,20 @@ if(scenario == 1){
 }
 rownames(beta_true) <- c("Intercept", "x")
 
-# do we need to set seed anywhere?
+I = 10e6 # superpopulation size
+set.seed(4574)
+X_des = cbind(1, rnorm(I, 0, 2)) # design matrix: Intercept + predicted variables
+true_fixef <- X_des %*% beta_true
 
-simulate_survey_fosr <- function(I = 10e6, # total population,
+simulate_survey_fosr <- function(X_des, # design matrix
+                                 beta_true, # true beta
+                                 true_fixef, # true fixed effects (Y)
                                  I_n = 50, # subjects in each psu-strata combination
                                  alpha = 2, # number PSU
                                  L = 50, # dimension of the functional domain
                                  SNR_sigma = 1,
                                  num_strata = 30 # total strata
 ){
-  # Generate X variable
-  X_des = cbind(1, rnorm(I, 0, 2))  # design matrix: Intercept + predicted variables
 
   # Generate strata sizes using a Dirichlet distribution
   dirichlet_probs = gtools::rdirichlet(1, rep(1, num_strata))
@@ -78,7 +80,7 @@ simulate_survey_fosr <- function(I = 10e6, # total population,
     psu_strata <- rbinom(length(sampled_in_strata), 1, 0.5) + 1
     psu <- c(psu, psu_strata)
   }
-  length(final_sample) # 2939, close to 30 * 50 * 2
+  # length(final_sample) # 2939, close to 30 * 50 * 2
 
   # Compute final individual selection probabilities
   p_i <- p_strata[stratum_assignments] * p_i_given_g
@@ -93,7 +95,6 @@ simulate_survey_fosr <- function(I = 10e6, # total population,
   )
 
   # Generate fixed effects and true Y.
-  true_fixef <- X_des %*% beta_true
   true_fixef_sample <- true_fixef[final_sample,]
 
   Y_obs <- matrix(NA, nrow(true_fixef_sample), L)
@@ -116,6 +117,8 @@ simulate_survey_fosr <- function(I = 10e6, # total population,
   colnames(Y_obs) <- paste0("Y", 1:L)
 
   sample_data <- cbind(dat.sim, Y_obs)
+  sample_data <- sample_data %>%
+    filter(!is.na(weight)) # sometimes happens if not all strata are assigned
 
   return(sample_data)
 }

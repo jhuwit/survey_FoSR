@@ -8,6 +8,9 @@ nsim <- 100
 B <- 500
 parallel = TRUE
 
+
+## make grid of scenarios and then just iterate thru on cluster
+# vary: sample size, sampling probabilities, informative sampling, distribution of outcome, SNR
 ncores = parallelly::availableCores() - 1
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'no_design')
 options(survey.lonely.psu = "adjust")
@@ -15,7 +18,9 @@ sim_res <- list() ## store simulation results
 for(iter in 1:nsim) {
   set.seed(iter + 1)
   x = try({
-    data <- simulate_survey_fosr(I = 10000, ## number of subjects in population
+    data <- simulate_survey_fosr(X_des = X_des,
+                                 beta_true = beta_true,
+                                 true_fixef = true_fixef,
                                  L = 50, ## dimension of the functional domain
                                  SNR_sigma = 1,
                                  I_n = 50, # subjects in each psu-strata combination
