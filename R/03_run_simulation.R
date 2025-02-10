@@ -12,7 +12,7 @@ fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 nsim = 500
 parallel = TRUE
 ncores = parallelly::availableCores() - 1
-boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
+boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'no_design_bootweight', 'no_design', 'none')
 options(survey.lonely.psu = "adjust")
 
 
