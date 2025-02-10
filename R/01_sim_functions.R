@@ -1,32 +1,31 @@
-# need to load packages!
+required_packages <- c("svrep", "purrr", "progress", "svylme", 'dplyr', 'readr', 'refund', 'gtools')
 
-
-L = 50
-grid <- seq(0, 1, length = L)
-beta_true <- matrix(NA, 2, L) # time-dependent beta-true trajectory
-scenario <- 1 ## indicate the scenario to use
-if(scenario == 1){
-  beta_true[1,] = -0.15 - 0.1*sin(2*grid*pi) - 0.1*cos(2*grid*pi)
-  beta_true[2,] = dnorm(grid, .6, .15)/20
-}else if(scenario == 2){
-  beta_true[1,] <- 0.53 + 0.06*sin(3*grid*pi) - 0.03*cos(6.5*grid*pi)
-  beta_true[2,] <- dnorm(grid, 0.2, .1)/60 + dnorm(grid, 0.35, .1)/200 -
-    dnorm(grid, 0.65, .06)/250 + dnorm(grid, 1, .07)/60
+install_and_load <- function(package) {
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package)
+    library(package, character.only = TRUE)
+  }
 }
-rownames(beta_true) <- c("Intercept", "x")
 
+library(here)
+library(devtools)
+library(fastFMM)
+library(haven)
+library(dplyr)
+library(survey)
+library(progress)
+library(lme4)
+library(mgcv)
+library(ggplot2)
+library(gridExtra)
 
-
-######## functions
 
 # get beta hat
-get_betatilde = function(data){
+get_betatilde = function(data, family = "gaussian"){
   Y_mat <- data[, grepl('Y.', colnames(data))]
   dat.fit <- data.frame(Y = Y_mat, data[, !grepl('Y.', colnames(data))])
   model_formula = as.formula(paste0('Y~', 'X'))
 
-  weighted = TRUE
-  family = "gaussian"
 
   out_index <- grep(paste0("^", model_formula[2]), names(data)) # indices that start with the outcome name
   if(length(out_index) != 1){ # functional observations stored in multiple columns
@@ -35,7 +34,7 @@ get_betatilde = function(data){
     L <- ncol(data[,out_index])
   }
   argvals <- 1:L
-  unimm <- function(l, out_index){
+  unimm <- function(l){
     data$Yl <- unclass(data[,out_index][,l])
 
     svy_design <- svydesign(ids = ~ psu,
@@ -44,31 +43,16 @@ get_betatilde = function(data){
                             data = data,
                             nest = TRUE)
     # fit survey-weighted regression using svyglm
-    if(weighted == TRUE){
-      if(family == "gaussian"){
-        fit_uni <- suppressMessages(svyglm(formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-                                           design = svy_design,
-                                           control = glm.control(maxit = 5000)))
-      }else{
-        fit_uni <- suppressMessages(svyglm(formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-                                           design = svy_design,
-                                           family = family,
-                                           control = glm.control(maxit = 5000)))
-      }} else{
-        if(family == "gaussian"){
-          fit_uni <- suppressMessages(lm(formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-                                         data = data))
-        }else{
-          fit_uni <- suppressMessages(glm(formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-                                          data = data,
-                                          family = family) )
-        }
-      }
-
+    fit_uni <- suppressMessages(
+      svyglm(
+        formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
+        design = svy_design,
+        family = family,
+        control = glm.control(maxit = 5000)
+      )
+    )
     betaTilde <- coef(fit_uni)
-
     return(list(betaTilde = betaTilde))
-
   }
 
   massmm <- lapply(argvals, unimm)
@@ -96,10 +80,10 @@ get_betahat = function(betaTilde, L = 50,
 # betaTilde = get_betatilde(data)
 # betaHat = get_betahat(betaTilde)
 
-run_boots = function(data, betaHat, boot_type, num_boots = 500, set_seed = TRUE, seed = 2025, L = 50, out_index){
+run_boots = function(data, betaHat, family = "gaussian", boot_type, num_boots = 500, set_seed = TRUE, seed = 2025, L = 50, out_index){
   argvals = 1:L
-  if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "Preston", "no_design"))){
-    stop("please specify boot_type as one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'Preston', or 'no_design'")
+  if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "Preston", "none", "weighted"))){
+    stop("please specify boot_type as one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'Preston', 'weighted', or 'none'")
   }
   # array with dimensions num_coefficients x length functional domain x num_boots
   betaTilde_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), num_boots))
@@ -139,6 +123,7 @@ run_boots = function(data, betaHat, boot_type, num_boots = 500, set_seed = TRUE,
         )
       coef.output = svyglm(formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
                design = bs_design,
+               family = family,
                return.replicates = TRUE,
                control = glm.control(maxit = 5000))
 
@@ -167,7 +152,7 @@ run_boots = function(data, betaHat, boot_type, num_boots = 500, set_seed = TRUE,
             formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
             data = dat_tmp,
             weights = weight,
-            family = "gaussian",
+            family = family,
             control = glm.control(maxit = 5000)
           )
 
@@ -175,7 +160,23 @@ run_boots = function(data, betaHat, boot_type, num_boots = 500, set_seed = TRUE,
         })
       )
       betaTilde_boot[,l,] <- coefs
-    } else if(boot_type == "no_design"){
+    } else if(boot_type == "weighted"){
+      coefs <- do.call(
+        cbind,
+        lapply(1:num_boots, function(num) {
+          set.seed(l * num)
+          index <- sample(row_number(data), dim(data)[1], replace = TRUE, prob = data$weight / sum(data$weight))
+          dat.tmp <- data[index, ]
+
+          model <- glm(
+            formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
+            data = dat.tmp,
+            weights = weight,
+            family = family)
+          model$coefficients
+        }))
+      betaTilde_boot[,l,] <- coefs
+    } else if (boot_type == "none"){
       coefs <- do.call(
         cbind,
         lapply(1:num_boots, function(num) {
@@ -183,9 +184,10 @@ run_boots = function(data, betaHat, boot_type, num_boots = 500, set_seed = TRUE,
           index <- sample(row_number(data), dim(data)[1], replace = TRUE)
           dat.tmp <- data[index, ]
 
-          model <- lm(
+          model <- glm(
             formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-            data = dat.tmp)
+            data = dat.tmp,
+            family = family)
           model$coefficients
         }))
       betaTilde_boot[,l,] <- coefs
@@ -220,9 +222,9 @@ get_cis = function(betaTilde_boot,
   }
   for (r in 1:nrow(betaHat)) {
     if (smooth_for_variance) {
-      betaHat.var[, , r] <- 1.2 * var(t(betaHat_boot[r, , ])) # scaling is correct??
+      betaHat.var[, , r] <- 1.2 * var(t(betaHat_boot[r, , ]))
     } else{
-      betaHat.var[, , r] <- 1.2 * var(t(betaTilde_boot[r, , ])) # scaling is correct??
+      betaHat.var[, , r] <- 1.2 * var(t(betaTilde_boot[r, , ]))
     }
   }
 
