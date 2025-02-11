@@ -185,28 +185,3 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
   write_rds(result, here::here("results", "simulations", fname))
 }
 
-#
-# ## Clean results
-# ################################################################################
-# ## Obtain MISE, coverage, and computing time
-# ################################################################################
-# ## MISE
-# MISE_lfosr3s <- lapply(sim_local, '[[', 1) %>% bind_rows()
-# colMeans(MISE_lfosr3s)
-#
-# ## coverage
-# ### joint
-# cover_lfosr3s <- t(lapply(sim_local, '[[', 2) %>% bind_cols())
-# ### point-wise
-# cover_lfosr3s_pw <- array(NA, dim = c(nsim, L, p))
-# for(i in 1:nsim){
-#   cover_lfosr3s_pw[i,,1] <- sim_local[[i]]$cover_lfosr3s_pw[2,] # intercept
-#   cover_lfosr3s_pw[i,,2] <- sim_local[[i]]$cover_lfosr3s_pw[2,] # fixed effects
-# }
-# ### print results
-# print(paste0("lfosr3s coverage (joint CI): ", colMeans(cover_lfosr3s)[2]))
-# print(paste0("lfosr3s coverage (pointwise CI): ", apply(cover_lfosr3s_pw, 3, mean)[2]))
-#
-# ## time
-# time_lfosr3s <- lapply(sim_local, '[[', 4) %>% bind_rows()
-# print(apply(time_lfosr3s, 2, median))

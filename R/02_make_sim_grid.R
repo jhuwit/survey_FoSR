@@ -19,3 +19,15 @@ sim_settings = expand_grid(
   mutate(fold = row_number())
 
 write_rds(sim_settings, here::here("sim_data", "sim_settings.rds"))
+
+sim_settings = expand_grid(
+  I_n = I_n,
+  scenario = scenarios,
+  sigma = sigma,
+  sampled_strata = sampled_strata,
+  num_boots = num_boots,
+  family = "gaussian"
+) %>%
+  mutate(fold = row_number())
+
+write_rds(sim_settings, here::here("sim_data", "sim_settings_inf.rds"))
