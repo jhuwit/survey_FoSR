@@ -3,13 +3,13 @@ library(furrr)
 library(tidyverse)
 force = FALSE
 source(here::here("R", "01_sim_functions.R"))
-source(here::here("R", "00_data_gen_function.R"))
+source(here::here("R", "00_data_gen_function_inf.R"))
 source(here::here("R", "utils.R"))
-sim_settings = read_rds(here::here("sim_data", "sim_settings.rds"))
+sim_settings = read_rds(here::here("sim_data", "sim_settings_inf.rds"))
 ifold = get_fold()
-fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
+fname = paste0("siminf_fold_", sprintf("%03d", ifold), ".rds")
 
-nsim = 500
+nsim = 100
 parallel = TRUE
 ncores = parallelly::availableCores() - 1
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'no_design_bootweight', 'no_design', 'none')
@@ -21,7 +21,8 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
   tmp_settings = sim_settings %>% filter(fold == ifold)
   scenario = tmp_settings$scenario
   SNR_sigma = tmp_settings$sigma
-  family = tmp_settings$family
+  # family = tmp_settings$family
+  family = "gaussian" # for now only implement for gaussian data
   B = tmp_settings$num_boots
   I_n = tmp_settings$I_n
   sampled_strata = tmp_settings$sampled_strata
@@ -61,6 +62,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
       ncol = L,
       byrow = TRUE
     )
+    fpca_Y = refund::fpca.face(Y_obs, center = TRUE)
   } else if (family == "binomial") {
     p_true = plogis(true_fixef)
     Y_obs <- matrix(
@@ -87,8 +89,9 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
   for (iter in 1:nsim) {
     set.seed(iter)
     x = try({
-      data <- simulate_survey_fosr(
+      data <- simulate_survey_fosr_informative(
         X_des = X_des,
+        Y_fpca = fpca_Y,
         Y_obs = Y_obs,
         beta_true = beta_true,
         true_fixef = true_fixef,
