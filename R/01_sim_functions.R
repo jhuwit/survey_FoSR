@@ -82,8 +82,8 @@ get_betahat = function(betaTilde, L = 50,
 
 run_boots = function(data, betaHat, family = "gaussian", boot_type, num_boots = 500, set_seed = TRUE, seed = 2025, L = 50, out_index){
   argvals = 1:L
-  if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "Preston", "none", "weighted"))){
-    stop("please specify boot_type as one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'Preston', 'weighted', or 'none'")
+  if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "Preston", "no_design_bootweight", "no_design", "none"))){
+    stop("please specify boot_type as one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'Preston', 'no_design_bootweight', 'no_design', or 'none'")
   }
   # array with dimensions num_coefficients x length functional domain x num_boots
   betaTilde_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), num_boots))
@@ -160,12 +160,28 @@ run_boots = function(data, betaHat, family = "gaussian", boot_type, num_boots = 
         })
       )
       betaTilde_boot[,l,] <- coefs
-    } else if(boot_type == "weighted"){
+    } else if(boot_type == "no_design_bootweight"){
       coefs <- do.call(
         cbind,
         lapply(1:num_boots, function(num) {
           set.seed(l * num)
           index <- sample(row_number(data), dim(data)[1], replace = TRUE, prob = data$weight / sum(data$weight))
+          dat.tmp <- data[index, ]
+
+          model <- glm(
+            formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
+            data = dat.tmp,
+            weights = weight,
+            family = family)
+          model$coefficients
+        }))
+      betaTilde_boot[,l,] <- coefs
+    } else if (boot_type == "no_design"){
+      coefs <- do.call(
+        cbind,
+        lapply(1:num_boots, function(num) {
+          set.seed(l * num)
+          index <- sample(row_number(data), dim(data)[1], replace = TRUE)
           dat.tmp <- data[index, ]
 
           model <- glm(
