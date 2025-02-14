@@ -73,6 +73,7 @@ simulate_survey_fosr <- function(X_des, # design matrix
                                  sampled_strata = 30
 ){
 
+  I = nrow(X_des)
   # Generate strata sizes using a Dirichlet distribution
   dirichlet_probs = gtools::rdirichlet(1, rep(1, num_strata)) # vector that sums to 1, of length num_strata
   if(sampled_strata == num_strata){ # if we are taking all of the strata, then selected strata are all
