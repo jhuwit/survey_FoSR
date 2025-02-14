@@ -142,6 +142,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
           data = data,
           betaHat = betaHat,
           num_boots = B,
+          family = family,
           set_seed = TRUE,
           seed = 2025,
           L = 50,
@@ -152,6 +153,8 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
           .x = res,
           .f = get_cis,
           betaHat = betaHat,
+          smooth_for_ci = TRUE,
+          smooth_for_variance = TRUE,
           .progress = TRUE
         )
       }
