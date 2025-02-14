@@ -134,6 +134,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
         cis = future_map(
           .x = res,
           .f = get_cis,
+          smooth_for_ci = TRUE,
           betaHat = betaHat,
           .options = furrr_options(seed = TRUE)
         )
@@ -144,6 +145,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
           .f = run_boots,
           data = data,
           betaHat = betaHat,
+          family = family,
           num_boots = B,
           set_seed = TRUE,
           seed = 2025,
@@ -154,6 +156,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
         cis = map(
           .x = res,
           .f = get_cis,
+          smooth_for_ci = TRUE,
           betaHat = betaHat,
           .progress = TRUE
         )

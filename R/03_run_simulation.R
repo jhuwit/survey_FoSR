@@ -1,7 +1,7 @@
 library(future)
 library(furrr)
 library(tidyverse)
-force = FALSE
+force = TRUE
 source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "00_data_gen_function.R"))
 source(here::here("R", "utils.R"))
@@ -12,7 +12,8 @@ fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 nsim = 500
 parallel = TRUE
 ncores = parallelly::availableCores() - 1
-boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'no_design_bootweight', 'no_design', 'none')
+boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
+fit_types = c('design', 'design', 'design', 'weighted', 'none')
 options(survey.lonely.psu = "adjust")
 
 
@@ -108,17 +109,17 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
       model_formula = as.formula(paste0('Y~', 'X'))
       out_index <- grep(paste0("^", model_formula[2]), names(data))
 
+      betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = family)
 
-      betaTilde = get_betatilde(data, family = family)
-      betaHat = get_betahat(betaTilde)
+      betaHat = map(.x = betaTilde, get_betahat)
 
       if (parallel) {
         plan(multisession, workers = ncores)
-        res = future_map(
+        res = future_map2(
           .x = boot_types,
+          .y = betaHat,
           .f = run_boots,
           data = data,
-          betaHat = betaHat,
           family = family,
           num_boots = B,
           set_seed = TRUE,
@@ -128,35 +129,32 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
           .options = furrr_options(seed = TRUE)
         )
 
-        cis = future_map(
+        cis = future_map2(
           .x = res,
+          .y = betaHat,
           .f = get_cis,
-          betaHat = betaHat,
+          smooth_for_ci = TRUE,
           .options = furrr_options(seed = TRUE)
         )
         plan(sequential)
       } else{
-        res = map(
+        res = map2(
           .x = boot_types,
+          .y = betaHat,
           .f = run_boots,
           data = data,
-          betaHat = betaHat,
-          num_boots = B,
           family = family,
+          num_boots = B,
           set_seed = TRUE,
           seed = 2025,
           L = 50,
-          out_index = out_index
-        )
+          out_index = out_index)
 
-        cis = map(
+        cis = map2(
           .x = res,
+          .y = betaHat,
           .f = get_cis,
-          betaHat = betaHat,
-          smooth_for_ci = TRUE,
-          smooth_for_variance = TRUE,
-          .progress = TRUE
-        )
+          smooth_for_ci = TRUE)
       }
 
       stats = map2(
