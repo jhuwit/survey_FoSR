@@ -60,7 +60,10 @@ simulate_survey_fosr_informative <- function(X_des, # design matrix
     inds <- which(stratum_assignments == strata)
     # inclusion_probs <- exp(X_des[inds, 2])  # Compute individual inclusion probabilities based on covariate
     # inclusion_probs <- exp(-10 * score1 + 10 * score2 + 10 * score3)
-    inclusion_probs <- exp(10 * score1[inds] + 10 * score2[inds] + 10 * score3[inds])
+    # inclusion_probs <- exp(10 * score1[inds] + 10 * score2[inds] + 10 * score3[inds])
+    inclusion_probs_unsc <- -1 * score1[inds] +  score2[inds] + score3[inds]
+    inclusion_probs <- scale(inclusion_probs_unsc, center = TRUE, scale = TRUE)[,1]
+    inclusion_probs <- exp(inclusion_probs)
     # high = which(inclusion_probs >= quantile(inclusion_probs, .999))
     # low = which(inclusion_probs <= quantile(inclusion_probs, .001))
     #
