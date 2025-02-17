@@ -114,8 +114,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
         num_boots = B,
         set_seed = TRUE,
         seed = 2025,
-        L = 50,
-        out_index = out_index
+        L = 50
       )
 
       # 4. Compute confidence intervals
@@ -135,7 +134,11 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
       ) %>%
         list_rbind() %>%
         mutate(n = nrow(data), n_boot = B)
-
+      rm(data)
+      rm(res)
+      rm(cis)
+      rm(betaHat)
+      rm(betaTilde)
       return(stats)
 
     }, error = function(e) {
