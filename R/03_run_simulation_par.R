@@ -1,6 +1,7 @@
 library(future)
 library(furrr)
 library(tidyverse)
+library(parallel)
 force = TRUE
 source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "00_data_gen_function.R"))
@@ -10,7 +11,7 @@ ifold = get_fold()
 fname = paste0("sim_fold_", sprintf("%03d", ifold), "test.rds")
 
 nsim = 500
-ncores = parallelly::availableCores() - 1
+ncores = parallel::detectCores() - 1
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
 fit_types = c('design', 'design', 'design', 'weighted', 'none')
 options(survey.lonely.psu = "adjust")
@@ -144,7 +145,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
   }
 
   # Run all iterations in parallel:
-  sim_res <- future_map(1:nsim, run_one_iteration, .options = furrr_options(seed = TRUE), .progress = TRUE)
+  sim_res <- parallel::mclapply(1:nsim, run_one_iteration, mc.cores = ncores)
   result <- sim_res %>%
     keep(~ is.data.frame(.x)) %>%
     list_rbind(names_to = "id")
