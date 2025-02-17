@@ -8,7 +8,7 @@ source(here::here("R", "00_data_gen_function.R"))
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings.rds"))
 ifold = get_fold()
-fname = paste0("sim_fold_", sprintf("%03d", ifold), "test.rds")
+fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
 nsim = 500
 ncores = parallel::detectCores() - 1
@@ -134,11 +134,9 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
       ) %>%
         list_rbind() %>%
         mutate(n = nrow(data), n_boot = B)
-      rm(data)
-      rm(res)
-      rm(cis)
-      rm(betaHat)
-      rm(betaTilde)
+      rm(data, res, cis, betaHat, betaTilde)
+      gc()
+
       return(stats)
 
     }, error = function(e) {
