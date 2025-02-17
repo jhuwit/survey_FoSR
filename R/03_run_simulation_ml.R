@@ -13,7 +13,8 @@ fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 nsim = 500
 parallel = FALSE
 ncores = parallelly::availableCores() - 1
-boot_types = c('BRR', 'bootstrap', 'JKn', 'no_design_bootweight', 'no_design', 'none')
+boot_types = c('BRR', 'bootstrap', 'JKn', 'weighted', 'none')
+fit_types = c('svy2lme', 'svy2lme', 'svy2lme', 'lmer_wtd', 'lmer')
 options(survey.lonely.psu = "adjust")
 
 
@@ -146,30 +147,44 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
       # model_formula = as.formula(paste0('Y~', 'X'))
       # out_index <- grep(paste0("^", model_formula[2]), names(data))
 
+      betaTilde = map(.x = fit_types,
+                      .f = get_betatilde,
+                      data = data,
+                      formula = Y ~ X + (1 | ID), argvals = NULL)
 
-      betaTilde = get_betatilde(data, formula = Y ~ X + (1 | ID), argvals = NULL)
-      betaHat = get_betahat(betaTilde)
+      map(.x = betaTilde,
+          .f = \(x) x %>% as_tibble() %>%
+            mutate(beta = c("beta_0", "beta_1")) %>%
+            pivot_longer(cols = -beta) %>%
+            mutate(L = as.numeric(name))) %>%
+        bind_rows(.id = "id") %>%
+        ggplot(aes(x = L, y = value, color = id)) +
+        geom_line() +
+        facet_wrap(.~beta)
+      # betaTilde = get_betatilde(data, formula = Y ~ X + (1 | ID), argvals = NULL)
+      betaHat = map(.f = get_betahat,
+                    .x = betaTilde)
 
       if (parallel) {
         plan(multisession, workers = ncores)
-        res = future_map(
+        res = future_map2(
           .x = boot_types,
+          .y = betaHat,
           .f = run_boots,
           data = data,
-          betaHat = betaHat,
           family = family,
-          num_boots = B,
+          num_boots = 20,
           set_seed = TRUE,
           seed = 2025,
           L = 50,
-          out_index = out_index,
           .options = furrr_options(seed = TRUE)
         )
-
-        cis = future_map(
+        # haven't done yet
+        cis = future_map2(
           .x = res,
+          .y = betaHat,
           .f = get_cis,
-          betaHat = betaHat,
+          smooth_for_ci = TRUE,
           .options = furrr_options(seed = TRUE)
         )
         plan(sequential)

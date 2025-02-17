@@ -21,13 +21,11 @@ library(gridExtra)
 
 
 # get beta hat
-get_betatilde = function(data, family = "gaussian", type = "design"){
+get_betatilde = function(data, family = "gaussian", type = "design",
+                         model_formula = as.formula(paste0('Y~', 'X'))){
   if(!(type %in% c("design", "weighted", "none"))){
     stop("please specify boot_type as one of 'design', 'weighted', 'none'")
   }
-  Y_mat <- data[, grepl('Y.', colnames(data))]
-  dat.fit <- data.frame(Y = Y_mat, data[, !grepl('Y.', colnames(data))])
-  model_formula = as.formula(paste0('Y~', 'X'))
 
   out_index <- grep(paste0("^", model_formula[2]), names(data)) # indices that start with the outcome name
   if(length(out_index) != 1){ # functional observations stored in multiple columns
@@ -114,11 +112,14 @@ get_betahat = function(betaTilde, L = 50,
 # betaTilde = get_betatilde(data)
 # betaHat = get_betahat(betaTilde)
 
-run_boots = function(data, boot_type, betaHat, family = "gaussian", num_boots = 500, set_seed = TRUE, seed = 2025, L = 50, out_index){
+run_boots = function(data, boot_type, betaHat, family = "gaussian",
+                     num_boots = 500, set_seed = TRUE, seed = 2025, L = 50,
+                     model_formula = as.formula(paste0('Y~', 'X'))){
   argvals = 1:L
   if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "Preston", "no_design_bootweight", "weighted", "none"))){
     stop("please specify boot_type as one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'Preston', 'weighted', 'none'")
   }
+  out_index <- grep(paste0("^", model_formula[2]), names(data))
   # array with dimensions num_coefficients x length functional domain x num_boots
   betaTilde_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), num_boots))
   # get BRR replicates if type is BRR - only need to do this once
@@ -239,6 +240,8 @@ get_cis = function(betaTilde_boot,
   betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
   betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
   # smooth
+
+
   for (b in 1:B) {
     betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
       gam(x ~ s(

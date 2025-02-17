@@ -22,7 +22,7 @@ library(gridExtra)
 
 # get beta hat
 get_betatilde = function(data, family = "gaussian", formula = Y ~ X + (1 | ID),
-                         argvals = NULL){
+                         argvals = NULL, type = "svy2lme"){
   model_formula <- as.character(formula)
   stopifnot(model_formula[1] == "~" & length(model_formula) == 3)
 
@@ -30,20 +30,14 @@ get_betatilde = function(data, family = "gaussian", formula = Y ~ X + (1 | ID),
   if(is.null(argvals)) argvals <- 1:L
 
 
-  unimm <- function(l){
+  unimm_svy2lme <- function(l){
     data$Yl <- unclass(data[,model_formula[2]][,l])
       options(survey.lonely.psu = "adjust") # process only one observation in the strata
       data$psu = as.character(data$psu)
       data$wid = 1
       data$visit = as.character(data$visit)
 
-      # design <- svydesign(id = ~ psu + ID,
-      #                     strata = ~ strata,
-      #                     weights = ~ weight + wid,
-      #                     data = data,
-      #                     nest = TRUE)
-
-      design2 <- svydesign(id = ~ psu + visit,
+      design <- svydesign(id = ~ psu + visit,
                           strata = ~ strata,
                           weights = ~ weight + wid,
                           data = data,
@@ -51,26 +45,54 @@ get_betatilde = function(data, family = "gaussian", formula = Y ~ X + (1 | ID),
 
 
       fit_uni <- svy2lme(formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-                         design = design2,
+                         design = design,
                          sterr = FALSE,
                          method = "general",
                          return.devfun = FALSE)
 
-      # fit_nodes = lmer(formula = as.formula(paste0("Yl ~ ", model_formula[3])),
-      #      data = data, control = lmerControl(optimizer = "bobyqa"))
 
-    # betaTilde <- lme4::fixef(fit_uni)
       betaTilde <- coef(fit_uni)
-    # return(list(betaTilde = betaTilde, group = as.data.frame(VarCorr(fit_uni))[1,1]))
       return(list(betaTilde = betaTilde))
   }
+  unimm_lmer_wtd <- function(l){
+    data$Yl <- unclass(data[,model_formula[2]][,l])
+    options(survey.lonely.psu = "adjust") # process only one observation in the strata
+    data$w_scaled <- data$weight / mean(data$weight)
+    fit_uni = lmer(formula = as.formula(paste0("Yl ~ ", model_formula[3])),
+         data = data, weights = w_scaled, control = lmerControl(optimizer = "bobyqa"))
 
-  num_cores = parallel::detectCores() - 1
-  if(parallel == TRUE){
-    massmm <- parallel::mclapply(argvals, unimm, mc.cores = num_cores)
-  }else{
-    massmm <- lapply(argvals, unimm)
+    betaTilde <- lme4::fixef(fit_uni)
+    # return(list(betaTilde = betaTilde, group = as.data.frame(VarCorr(fit_uni))[1,1]))
+    return(list(betaTilde = betaTilde))
   }
+  unimm_lmer <- function(l){
+    data$Yl <- unclass(data[,model_formula[2]][,l])
+    options(survey.lonely.psu = "adjust") # process only one observation in the strata
+    data$psu = as.character(data$psu)
+    data$wid = 1
+    data$visit = as.character(data$visit)
+
+
+    fit_uni = lmer(formula = as.formula(paste0("Yl ~ ", model_formula[3])),
+                   data = data, control = lmerControl(optimizer = "bobyqa"))
+
+    betaTilde <- lme4::fixef(fit_uni)
+    # return(list(betaTilde = betaTilde, group = as.data.frame(VarCorr(fit_uni))[1,1]))
+    return(list(betaTilde = betaTilde))
+  }
+  # num_cores = parallel::detectCores() - 1
+  if(type == "svy2lme"){
+    massmm <- lapply(argvals, unimm_svy2lme)
+  } else if(type == "lmer_wtd"){
+    massmm <- lapply(argvals, unimm_lmer_wtd)
+  } else if(type == "lmer"){
+    massmm <- lapply(argvals, unimm_lmer)
+  }
+  # if(parallel == TRUE){
+  #   massmm <- parallel::mclapply(argvals, unimm, mc.cores = num_cores)
+  # }else{
+  #   massmm <- lapply(argvals, unimm)
+  # }
   betaTilde <- t(lapply(massmm, '[[', 1) %>% bind_rows())
 
 
@@ -98,16 +120,17 @@ get_betahat = function(betaTilde, L = 50,
 
 ### START HERE
 
-run_boots = function(data, betaHat, family = "gaussian", boot_type, num_boots = 500, set_seed = TRUE, seed = 2025, L = 50,
+run_boots = function(boot_type, betaHat, data,  family = "gaussian", num_boots = 500, set_seed = TRUE, seed = 2025, L = 50,
                      formula = Y ~ X + (1 | ID)){
+  betaHat = betaHat[[1]]
   data$psu <- as.character(data$psu)
   model_formula <- as.character(formula)
   argvals = 1:L
   set_seed = TRUE
   seed  = 2025
-  boot_type = "bootstrap"
-  if(!(boot_type %in% c("BRR", "bootstrap", "JKn", "no_design_bootweight", "no_design", "none"))){
-    stop("please specify boot_type as one of 'BRR', 'bootstrap', 'JKn', 'no_design_bootweight', 'no_design', or 'none'")
+  # boot_type = "bootstrap"
+  if(!(boot_type %in% c('BRR', 'bootstrap', 'JKn', 'weighted', 'none'))){
+    stop("please specify boot_type as one of 'BRR', 'bootstrap', 'JKn', 'weighted', 'none'")
   }
   # array with dimensions num_coefficients x length functional domain x num_boots
   betaTilde_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), num_boots))
@@ -192,38 +215,12 @@ run_boots = function(data, betaHat, family = "gaussian", boot_type, num_boots = 
         })
       )
       betaTilde_boot[,l,] <- coefs
-    } else if(boot_type == "no_design_bootweight"){
+    } else if(boot_type == "weighted"){
       coefs <- do.call(
         cbind,
         lapply(1:num_boots, function(num) {
           set.seed(l * num)
           sampled_subs <- sample(data_subj$ID, nrow(data_subj), replace = TRUE, prob = data_subj$weight / sum(data_subj$weight))
-          boot_list <- lapply(seq_along(sampled_subs), function(i) {
-            subj <- sampled_subs[i]
-            df_subj <- data[data$ID == subj, ]
-            df_subj$boot_id <- i
-            # Optionally assign a new subject ID for the bootstrapped dataset.
-            # This distinguishes between multiple copies of the same subject.
-            return(df_subj)
-          })
-
-          # Combine the bootstrapped subjects into one data frame
-          boot_data <- do.call(rbind, boot_list)
-          boot_data$w_scaled = boot_data$weight / mean(boot_data$weight)
-          model <- lmer(
-            formula = stats::as.formula(paste0("Yl ~ ", "X + (1 | boot_id)")),
-            data = boot_data,
-            weights = w_scaled,
-            control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000)))
-          lme4::fixef(model)
-        }))
-      betaTilde_boot[,l,] <- coefs
-    } else if (boot_type == "no_design"){
-      coefs <- do.call(
-        cbind,
-        lapply(1:num_boots, function(num) {
-          set.seed(l * num)
-          sampled_subs <- sample(data_subj$ID, nrow(data_subj), replace = TRUE)
           boot_list <- lapply(seq_along(sampled_subs), function(i) {
             subj <- sampled_subs[i]
             df_subj <- data[data$ID == subj, ]

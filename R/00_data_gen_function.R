@@ -67,7 +67,6 @@ simulate_survey_fosr <- function(X_des, # design matrix
                                  true_fixef, # true fixed effects (Y)
                                  Y_obs, # y matrix
                                  I_n = 100, # subjects in each psu-strata combination
-                                 alpha = 2, # number PSU
                                  L = 50, # dimension of the functional domain
                                  num_strata = 30,  # total strata
                                  sampled_strata = 30
@@ -83,10 +82,13 @@ simulate_survey_fosr <- function(X_des, # design matrix
   }
   stratum_assignments = sample(1:num_strata, size = I, replace = TRUE, prob = dirichlet_probs) # assign each individual in entire population to one of the strata
 
-  p_strata = table(stratum_assignments) / sum(table(stratum_assignments))
-  p_strata = c(p_strata) %>% unname()
-  p_strata[which(!(1:num_strata %in% selected_strata))] <- 0 # if not selected, replace with 0
-  w_strata = 1 / p_strata
+  p_strata_design <- as.vector(dirichlet_probs)
+
+  # For strata that were not selected, set their probability to zero.
+  p_strata_design[!(1:num_strata %in% selected_strata)] <- 0
+
+  # Renormalize so that the selected strata probabilities sum to 1.
+  p_strata_design <- p_strata_design / sum(p_strata_design)
 
 
   # Second-stage: Individual Sampling within each strata
@@ -96,7 +98,7 @@ simulate_survey_fosr <- function(X_des, # design matrix
 
   for (strata in selected_strata) {
     inds <- which(stratum_assignments == strata)
-    inclusion_probs <- exp(X_des[inds, 2])  # Compute individual inclusion probabilities based on covariate
+    inclusion_probs <- exp(X_des[inds, 2] / 2)  # Compute individual inclusion probabilities based on covariate, dividing by 2 to reduce skewness
     inclusion_probs <- inclusion_probs / sum(inclusion_probs) # normalize
     inclusion_probs <- inclusion_probs * I_n * 2 # Scale to get the desired number of individuals in each strata / PSU combo
     # summary(inclusion_probs) # print inclusion probabilities
@@ -107,11 +109,10 @@ simulate_survey_fosr <- function(X_des, # design matrix
     psu_strata <- rbinom(length(sampled_in_strata), 1, 0.5) + 1 # randomly assign PSUs in strata
     psu <- c(psu, psu_strata)
   }
-  # length(final_sample) # 2939, close to 30 * 50 * 2
 
   # Compute final individual selection probabilities
-  p_i <- p_strata[stratum_assignments] * p_i_given_strata
-  survey_weights <- 1 / p_i  # Final survey weights (Inf: Not selected)
+  p_i <- p_strata_design[stratum_assignments] * p_i_given_strata
+  survey_weights <- 1 / p_i  # final survey weights
 
   dat.sim <- data.frame(
     ID = final_sample,
@@ -119,19 +120,14 @@ simulate_survey_fosr <- function(X_des, # design matrix
     strata = stratum_assignments[final_sample], # Assume same strata here ??
     psu = psu,
     weight = survey_weights[final_sample]
-  )
+  ) %>%
+    filter(!is.na(weight)) %>%
+    mutate(weight = weight / mean(weight))
 
   Y_sample <- data.frame(Y_obs[final_sample,])
   colnames(Y_sample) <- paste0("Y", 1:L)
 
   sample_data <- cbind(dat.sim, Y_sample)
-  sample_data <- sample_data %>%
-    filter(!is.na(weight)) # shouldn't happen but just in case
 
   return(sample_data)
 }
-# dat = replicate(100, simulate_survey_fosr(), simplify = FALSE)
-# write_rds(dat, here::here("sim_data", "dat_f1.rds"), compress = "xz")
-
-# data = simulate_survey_fosr()
-# write_rds(dat, here::here("sim_data", "dat_f2.rds"), compress = "xz")

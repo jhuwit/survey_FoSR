@@ -97,17 +97,11 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
         ## dimension of the functional domain
         I_n = I_n,
         # subjects in each psu-strata combination
-        alpha = 2,
         # number PSU
         num_strata = 30,
         sampled_strata = sampled_strata
       )
 
-      ## pre-process simulated data
-      Y_mat <- data[, grepl('Y.', colnames(data))]
-      dat.fit <- data.frame(Y = Y_mat, data[, !grepl('Y.', colnames(data))])
-      model_formula = as.formula(paste0('Y~', 'X'))
-      out_index <- grep(paste0("^", model_formula[2]), names(data))
 
       betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = family)
 
@@ -125,7 +119,6 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
           set_seed = TRUE,
           seed = 2025,
           L = 50,
-          out_index = out_index,
           .options = furrr_options(seed = TRUE)
         )
 
@@ -147,8 +140,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
           num_boots = B,
           set_seed = TRUE,
           seed = 2025,
-          L = 50,
-          out_index = out_index)
+          L = 50)
 
         cis = map2(
           .x = res,
@@ -180,8 +172,6 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
   if (!dir.exists(here::here("results", "simulations"))) {
     dir.create(here::here("results", "simulations"), recursive = TRUE)
   }
-
-
 
   write_rds(result, here::here("results", "simulations", fname))
 }
