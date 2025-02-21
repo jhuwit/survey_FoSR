@@ -9,10 +9,11 @@ sim_settings = read_rds(here::here("sim_data", "sim_settings_inf.rds"))
 ifold = get_fold()
 fname = paste0("siminf_fold_", sprintf("%03d", ifold), ".rds")
 
-nsim = 100
+nsim = 1
 parallel = TRUE
 ncores = parallelly::availableCores() - 1
-boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'no_design_bootweight', 'no_design', 'none')
+boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
+fit_types = c('design', 'design', 'design', 'weighted', 'none')
 options(survey.lonely.psu = "adjust")
 
 
@@ -21,8 +22,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
   tmp_settings = sim_settings %>% filter(fold == ifold)
   scenario = tmp_settings$scenario
   SNR_sigma = tmp_settings$sigma
-  # family = tmp_settings$family
-  family = "gaussian" # for now only implement for gaussian data
+  family = tmp_settings$family
   B = tmp_settings$num_boots
   I_n = tmp_settings$I_n
   sampled_strata = tmp_settings$sampled_strata
@@ -51,39 +51,19 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
 
 
   set.seed(4574)
-  if (family == "gaussian") {
-    Y_obs <- matrix(
-      rnorm(
-        n = nrow(true_fixef) * L,
-        mean = as.vector(t(true_fixef)),
-        sd = SNR_sigma
-      ),
-      nrow = nrow(true_fixef),
-      ncol = L,
-      byrow = TRUE
-    )
-    fpca_Y = refund::fpca.face(Y_obs, center = TRUE)
-  } else if (family == "binomial") {
-    p_true = plogis(true_fixef)
-    Y_obs <- matrix(
-      rbinom(
-        n = nrow(p_true) * L,
-        size = 1,
-        prob = as.vector(t(p_true))
-      ),
-      nrow = nrow(p_true),
-      ncol = L,
-      byrow = TRUE
-    )
-  } else if (family == "poisson") {
-    lam_true <- exp(true_fixef)
-    Y_obs <- matrix(
-      rpois(n = nrow(lam_true) * L, lambda = as.vector(t(lam_true))),
-      nrow = nrow(lam_true),
-      ncol = L,
-      byrow = TRUE
-    )
-  }
+
+  Y_obs <- matrix(
+    rnorm(
+      n = nrow(true_fixef) * L,
+      mean = as.vector(t(true_fixef)),
+      sd = SNR_sigma
+    ),
+    nrow = nrow(true_fixef),
+    ncol = L,
+    byrow = TRUE
+  )
+  fpca_Y = refund::fpca.face(Y_obs, center = TRUE)
+
 
   sim_res <- list() ## store simulation results
   for (iter in 1:nsim) {
@@ -99,67 +79,57 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
         ## dimension of the functional domain
         I_n = I_n,
         # subjects in each psu-strata combination
-        alpha = 2,
         # number PSU
         num_strata = 30,
         sampled_strata = sampled_strata
       )
 
-      ## pre-process simulated data
-      Y_mat <- data[, grepl('Y.', colnames(data))]
-      dat.fit <- data.frame(Y = Y_mat, data[, !grepl('Y.', colnames(data))])
-      model_formula = as.formula(paste0('Y~', 'X'))
-      out_index <- grep(paste0("^", model_formula[2]), names(data))
 
 
-      betaTilde = get_betatilde(data, family = family)
-      betaHat = get_betahat(betaTilde)
+      betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = family)
+
+      betaHat = map(.x = betaTilde, get_betahat)
 
       if (parallel) {
         plan(multisession, workers = ncores)
-        res = future_map(
+        res = future_map2(
           .x = boot_types,
+          .y = betaHat,
           .f = run_boots,
           data = data,
-          betaHat = betaHat,
           family = family,
           num_boots = B,
           set_seed = TRUE,
           seed = 2025,
           L = 50,
-          out_index = out_index,
           .options = furrr_options(seed = TRUE)
         )
 
-        cis = future_map(
+        cis = future_map2(
           .x = res,
+          .y = betaHat,
           .f = get_cis,
           smooth_for_ci = TRUE,
-          betaHat = betaHat,
           .options = furrr_options(seed = TRUE)
         )
         plan(sequential)
       } else{
-        res = map(
+        res = map2(
           .x = boot_types,
+          .y = betaHat,
           .f = run_boots,
           data = data,
-          betaHat = betaHat,
           family = family,
           num_boots = B,
           set_seed = TRUE,
           seed = 2025,
-          L = 50,
-          out_index = out_index
-        )
+          L = 50)
 
-        cis = map(
+        cis = map2(
           .x = res,
+          .y = betaHat,
           .f = get_cis,
-          smooth_for_ci = TRUE,
-          betaHat = betaHat,
-          .progress = TRUE
-        )
+          smooth_for_ci = TRUE)
       }
 
       stats = map2(

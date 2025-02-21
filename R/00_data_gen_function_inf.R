@@ -27,7 +27,6 @@ simulate_survey_fosr_informative <- function(X_des, # design matrix
                                  true_fixef, # true fixed effects (Y)
                                  Y_obs, # y matrix
                                  I_n = 100, # subjects in each psu-strata combination
-                                 alpha = 2, # number PSU
                                  L = 50, # dimension of the functional domain
                                  num_strata = 30,  # total strata
                                  sampled_strata = 30
@@ -45,10 +44,13 @@ simulate_survey_fosr_informative <- function(X_des, # design matrix
   }
   stratum_assignments = sample(1:num_strata, size = I, replace = TRUE, prob = dirichlet_probs) # assign each individual in entire population to one of the strata
 
-  p_strata = table(stratum_assignments) / sum(table(stratum_assignments))
-  p_strata = c(p_strata) %>% unname()
-  p_strata[which(!(1:num_strata %in% selected_strata))] <- 0 # if not selected, replace with 0
-  w_strata = 1 / p_strata
+  p_strata_design <- as.vector(dirichlet_probs)
+
+  # For strata that were not selected, set their probability to zero.
+  p_strata_design[!(1:num_strata %in% selected_strata)] <- 0
+
+  # Renormalize so that the selected strata probabilities sum to 1.
+  p_strata_design <- p_strata_design / sum(p_strata_design)
 
 
   # Second-stage: Individual Sampling within each strata
@@ -103,8 +105,8 @@ simulate_survey_fosr_informative <- function(X_des, # design matrix
   # length(final_sample) # 2939, close to 30 * 50 * 2
 
   # Compute final individual selection probabilities
-  p_i <- p_strata[stratum_assignments] * p_i_given_strata
-  survey_weights <- 1 / p_i  # Final survey weights (Inf: Not selected)
+  p_i <- p_strata_design[stratum_assignments] * p_i_given_strata
+  survey_weights <- 1 / p_i  # final survey weights
 
   dat.sim <- data.frame(
     ID = final_sample,
