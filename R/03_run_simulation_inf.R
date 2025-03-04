@@ -1,7 +1,7 @@
 library(future)
 library(furrr)
 library(tidyverse)
-force = FALSE
+force = TRUE
 source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "00_data_gen_function_inf.R"))
 source(here::here("R", "utils.R"))
@@ -9,7 +9,7 @@ sim_settings = read_rds(here::here("sim_data", "sim_settings_inf.rds"))
 ifold = get_fold()
 fname = paste0("siminf_fold_", sprintf("%03d", ifold), ".rds")
 
-nsim = 1
+nsim = 500
 parallel = TRUE
 ncores = parallelly::availableCores() - 1
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
