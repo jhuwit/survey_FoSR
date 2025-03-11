@@ -52,9 +52,17 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
       dnorm(grid, 0.65, .06) / 250 + dnorm(grid, 1, .07) / 60
   }
   rownames(beta_true) <- c("Intercept", "x")
+  nbasis <- 5  # Number of basis functions
+  basis <- fda::create.bspline.basis(rangeval = c(0, 1), nbasis = nbasis)
+  Phi <- fda::eval.basis(grid, basis)
 
 
-  rownames(beta_true) <- c("Intercept", "x")
+  set.seed(seed)
+  strata_scores <- matrix(rnorm(num_strata * nbasis, mean = 0, sd = sigma_strata), num_strata, nbasis)
+  set.seed(seed)
+  psu_scores <- matrix(rnorm(num_strata * psu_per_strata * nbasis, mean = 0, sd = sigma_psu),
+                       num_strata * psu_per_strata, nbasis)
+
 
   set.seed(seed)
   X_des = cbind(1, rnorm(I, 0, 2)) # design matrix: Intercept + predicted variables
@@ -70,25 +78,24 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
   # Assign PSUs within strata
   psu_assignments <- rep(NA, I)
   for (s in 1:num_strata) {
-    psus_in_stratum <- sample(1:psus_per_strata, sum(stratum_assignments == s), replace = TRUE)
+    psus_in_stratum <- sample(1:psu_per_strata, sum(stratum_assignments == s), replace = TRUE)
     psu_assignments[stratum_assignments == s] <- paste0(s, "_", psus_in_stratum)
   }
   # psu_assignments = "strata_psu" character format
-  set.seed(seed)
-  strata_random_effects <- rnorm(num_strata, mean = 0, sd = sigma_strata)
-  psu_levels <- unique(psu_assignments)
-  set.seed(seed)
-  psu_random_effects <- rnorm(length(psu_levels), mean = 0, sd = sigma_psu)
-  names(psu_random_effects) <- psu_levels
-  random_effects <- strata_random_effects[stratum_assignments] + psu_random_effects[psu_assignments]
+  strata_random_effects <- strata_scores %*% t(Phi)  # Shape: num_strata x L
+  psu_random_effects <- psu_scores %*% t(Phi)  # Shape: num_PSU x L
+
+  # Map strata and PSU effects to individuals
+  strata_effects_indiv <- strata_random_effects[stratum_assignments, ]
+  psu_effects_indiv <- psu_random_effects[as.numeric(factor(psu_assignments)), ]
+  random_effects <- strata_effects_indiv + psu_effects_indiv
 
   set.seed(seed)
   if (family == "gaussian") {
     Y_obs <- matrix(
       rnorm(
         n = nrow(true_fixef) * L,
-        mean = as.vector(t(true_fixef)) + strata_random_effects[stratum_assignments] +
-          psu_random_effects[psu_assignments],
+        mean = as.vector(t(true_fixef)) + random_effects,
         sd = SNR_sigma
       ),
       nrow = nrow(true_fixef),
@@ -120,18 +127,20 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
               X_des = X_des,
               stratum_assignments = stratum_assignments,
               psu_assignments = psu_assignments,
-              dirichlet_probs = dirichlet_probs))
+              dirichlet_probs = dirichlet_probs,
+              beta_true = beta_true))
 }
 
 
 simulate_survey_fosr_corr <- function(X_des, # design matrix
-                                 Y_obs, # y matrix
-                                 I_n = 100, # subjects in each psu-strata combination
-                                 num_strata = 30,  # total strata
-                                 sampled_strata = 30, # strata to be included in sample
-                                 stratum_assignments, # assignment to ea strata
-                                 psu_assignments, # assignment to psu (w/in strata)
-                                 dirichlet_probs # strata probabilities
+                                      Y_obs, # y matrix
+                                      I_n = 100, # subjects in each psu-strata combination
+                                      num_strata = 30,  # total strata
+                                      sampled_strata = 30, # strata to be included in sample
+                                      stratum_assignments, # assignment to ea strata
+                                      psu_assignments, # assignment to psu (w/in strata)
+                                      dirichlet_probs, # strata probabilities
+                                      L = 50 # length of fnl domain
 ){
 
   I = nrow(X_des)

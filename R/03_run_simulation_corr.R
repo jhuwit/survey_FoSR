@@ -3,7 +3,7 @@ library(furrr)
 library(tidyverse)
 force = TRUE
 source(here::here("R", "01_sim_functions.R"))
-source(here::here("R", "00_data_gen_function_corr.R"))
+source(here::here("R", "00_data_gen_function_corr2.R"))
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings.rds"))
 ifold = get_fold()
@@ -55,7 +55,7 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
         dirichlet_probs = lst$dirichlet_probs
       )
 
-
+      beta_true = lst$beta_true
       betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = family)
 
       betaHat = map(.x = betaTilde, get_betahat)
