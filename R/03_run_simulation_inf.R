@@ -152,12 +152,12 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
     keep(., is.data.frame) %>%
     list_rbind(names_to = "id")
 
-  if (!dir.exists(here::here("results", "simulations"))) {
-    dir.create(here::here("results", "simulations"), recursive = TRUE)
+  if (!dir.exists(here::here("results", "simulations", "inf"))) {
+    dir.create(here::here("results", "simulations", "inf"), recursive = TRUE)
   }
 
 
 
-  write_rds(result, here::here("results", "simulations", fname))
+  write_rds(result, here::here("results", "simulations", "inf", fname))
 }
 
