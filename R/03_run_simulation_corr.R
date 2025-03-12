@@ -17,7 +17,7 @@ fit_types = c('design', 'design', 'design', 'weighted', 'none')
 options(survey.lonely.psu = "adjust")
 
 # ifold = 1
-if(!file.exists(here::here("results", "simulations", fname)) ||
+if(!file.exists(here::here("results", "simulations", "noninf_corr", fname)) ||
    force) {
 
 
@@ -122,10 +122,10 @@ if(!file.exists(here::here("results", "simulations", fname)) ||
     keep(., is.data.frame) %>%
     list_rbind(names_to = "id")
 
-  if (!dir.exists(here::here("results", "simulations"))) {
-    dir.create(here::here("results", "simulations"), recursive = TRUE)
+  if (!dir.exists(here::here("results", "simulations", "noninf_corr"))) {
+    dir.create(here::here("results", "simulations", "noninf_corr"), recursive = TRUE)
   }
 
-  write_rds(result, here::here("results", "simulations", fname))
+  write_rds(result, here::here("results", "simulations", "noninf_corr", fname))
 }
 
