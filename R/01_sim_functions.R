@@ -301,7 +301,7 @@ get_cis = function(betaTilde_boot,
 # mod_output = get_cis(res[[1]], betaHat = betaHat)
 #
 
-get_coverage_stats = function(mod_output, beta_true, name){
+get_coverage_stats = function(mod_output, beta_true, name, L = 50){
   MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
   mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
   mean_joint_se <- numeric(nrow(beta_true))  # Store mean CI width
