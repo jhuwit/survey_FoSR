@@ -134,8 +134,7 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   #   facet_wrap(.~name, scales = "free_y")
 
   if (!dir.exists(here::here("results", "simulations", "non_survey"))) {
-    dir.create(
-      here::here("results", "simulations", "non_survey", recursive = TRUE))
+    dir.create(here::here("results", "simulations", "non_survey"), recursive = TRUE)
     }
 
   write_rds(result,
