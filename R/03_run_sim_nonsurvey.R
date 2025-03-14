@@ -25,15 +25,9 @@ force = FALSE
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
 ifold = get_fold()
-ifold = 2
 fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
 
-# B = 500
-# scen = 1
-# fam = "gaussian"
-# sigma = 1
-# samp_size = 500
 
 if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
    force) {
