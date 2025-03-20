@@ -18,8 +18,7 @@ library(gridExtra)
 library(refund)
 library(tidyverse)
 source(here::here("R", "sim_functions_unwt.R"))
-ncores_outer = parallelly::availableCores() - 1 - 4
-ncores_inner = 4
+ncores_total = parallelly::availableCores()
 force = TRUE
 
 source(here::here("R", "utils.R"))
@@ -42,6 +41,12 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   nsims = 500
   len = tmp_settings$L
   run_bayes = TRUE
+  if(family == "gaussian"){ # if gaussian, we don't need to bootstrap so don't need inner parallelization
+    ncores_outer = ncores_total - 1
+  } else{
+    ncores_outer = ncores_total - 4
+    ncores_inner = 4
+  }
   # iter = 1
   # nsims = 1
   plan(multisession, workers = ncores_outer)
