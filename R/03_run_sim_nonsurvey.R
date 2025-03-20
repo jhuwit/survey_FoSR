@@ -168,7 +168,8 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   .options = furrr_options(seed = TRUE),
   .progress = TRUE)
 
-  sim_res
+  print(sim_res)
+
   result =
     sim_res %>%
     keep(., is.data.frame) %>%
