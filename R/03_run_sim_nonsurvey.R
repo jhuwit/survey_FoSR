@@ -20,7 +20,7 @@ library(tidyverse)
 library(parallel)
 source(here::here("R", "sim_functions_unwt.R"))
 ncores_total = parallelly::availableCores() - 1
-force = TRUE
+force = FALSE
 
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
