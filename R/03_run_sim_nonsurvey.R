@@ -17,7 +17,7 @@ library(future)
 library(gridExtra)
 library(refund)
 library(tidyverse)
-library(future.apply)
+library(parallel)
 source(here::here("R", "sim_functions_unwt.R"))
 ncores_total = parallelly::availableCores() - 1
 force = TRUE

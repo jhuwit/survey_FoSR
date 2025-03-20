@@ -185,7 +185,7 @@ get_betahat_analytic = function(betaTilde, L = 50, splines = "tp",
 run_boots = function(data, betaHat, family = "gaussian",
                      num_boots = 500, set_seed = TRUE, seed = 2025, L = 50,
                      model_formula = as.formula(paste0('Y~', 'X')),
-                     parallel = FALSE, ncores_inner = 4){
+                     parallel = FALSE, ncores_inner = 1){
   argvals = 1:L
 
   out_index <- grep(paste0("^", model_formula[2]), names(data))
@@ -198,7 +198,7 @@ run_boots = function(data, betaHat, family = "gaussian",
                          total = L)
   # get bootstrap estimates at each point along functional domain
   if(parallel){
-    plan(multisession, workers = ncores_inner)
+
     for(l in 1:L) {
       pb$tick()
       data$Yl <- unclass(data[, out_index][, argvals[l]])
@@ -209,7 +209,7 @@ run_boots = function(data, betaHat, family = "gaussian",
 
       coefs <- do.call(
         cbind,
-        future_lapply(1:num_boots, function(num) {
+        mclapply(1:num_boots, function(num) {
           set.seed(l * num)
           index <- sample(nrow(data), nrow(data), replace = TRUE)
           dat.tmp <- data[index, ]
@@ -220,14 +220,11 @@ run_boots = function(data, betaHat, family = "gaussian",
             family = family
           )
           model$coefficients
-        }, future.seed = TRUE,
-        future.scheduling = 1,
-        future.globals = c("data", "model_formula", "family"))
+        }, mc.cores = ncores_inner) # Use mc.cores instead of nested future
       )
 
       betaTilde_boot[, l, ] <- coefs
     }
-    plan(sequential)
   } else {
     for(l in 1:L){
     pb$tick()
