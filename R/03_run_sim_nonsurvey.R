@@ -18,9 +18,9 @@ library(gridExtra)
 library(refund)
 library(tidyverse)
 source(here::here("R", "sim_functions_unwt.R"))
-ncores = parallelly::availableCores() - 1
-
-force = FALSE
+ncores_outer = parallelly::availableCores() - 1 - 4
+ncores_inner = 4
+force = TRUE
 
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
@@ -34,7 +34,6 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   tmp_settings = sim_settings %>% filter(fold == ifold) # set settings for this simulation
 
 
-
   scen = tmp_settings$scenario
   sigma = tmp_settings$sigma
   family = tmp_settings$family
@@ -42,7 +41,10 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   samp_size = tmp_settings$n
   nsims = 500
   len = tmp_settings$L
-  plan(multisession, workers = ncores)
+  run_bayes = TRUE
+  # iter = 1
+  # nsims = 1
+  plan(multisession, workers = ncores_outer)
   sim_res <- future_map(1:nsims, function(iter) {
     x = try({
       data = generate_population(
@@ -56,28 +58,47 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
       sample_data = data$sample_data
 
       #### fui
-      tic()
-      b_hat =
-        sample_data %>%
-        get_betatilde() %>%
-        get_betahat(., L = len)
+      if(family != "gaussian") {
+        tic()
+        b_hat =
+          sample_data %>%
+          get_betatilde(., family = family) %>%
+          get_betahat(., L = len)
 
-      boots = run_boots(
-        b_hat,
-        set_seed = TRUE,
-        data = sample_data,
-        seed = iter,
-        family = family,
-        num_boots = B,
-        L = len
-      )
+        boots = run_boots(
+          b_hat,
+          set_seed = TRUE,
+          data = sample_data,
+          seed = iter,
+          family = family,
+          num_boots = B,
+          L = len,
+          parallel = TRUE,
+          ncores_inner = ncores_inner
+        )
 
-      ci = get_cis(boots, b_hat, smooth_for_ci = TRUE, L = len)
-      elapsed_time = toc(quiet = TRUE)
-      stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = len) %>%
-        mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
+        ci = get_cis_boot(boots, b_hat, smooth_for_ci = TRUE, L = len)
+        elapsed_time = toc(quiet = TRUE)
+        stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = len) %>%
+          mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
+        rm(boots)
+      } else {
+        tic()
+        beta_tilde =
+          sample_data %>%
+          get_betatilde(., family = family)
+
+        b_hat = beta_tilde %>%
+          get_betahat(., L = len)
+
+        ci = get_cis_analytic(betaHat = b_hat, betaTilde = beta_tilde, L = len, data = sample_data)
+        elapsed_time = toc(quiet = TRUE)
+        stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = len, type = "analytic") %>%
+          mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
+      }
 
       elapsed_time <- NULL
+
       #### famm
       Y_mat =
         sample_data %>%
@@ -90,10 +111,10 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
         select(-starts_with("Y")) %>%
         mutate(Y_mat = I(Y_mat)) %>%
         pffr(
-          Y_mat ~ X + s(ID, bs = "re"),
+          Y_mat ~ X,
           data = .,
           algorithm = "bam",
-          discrete = TRUE,
+          family = family,
           method = "fREML",
           bs.yindex = list(
             bs = "ps",
@@ -105,16 +126,43 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
       stats_famm = get_coverage_stats_famm(fit_pffr, beta_true = data$beta_true, L = len) %>%
         mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
 
-      ret =
-        stats_famm %>%
-        mutate(type = "FAMM") %>%
-        bind_rows(stats_fui %>% mutate(type = "FUI"))
-      rm(stats_famm, stats_fui, elapsed_time, Y_mat, boots, sample_data, b_hat, ci, data, fit_pffr)
+      ## bayes
+      if(family == "gaussian" && run_bayes){ # can only run bayes for gaussian models
+        Y_mat =
+          sample_data %>%
+          select(starts_with("Y")) %>%
+          as.matrix()
+        df = sample_data %>%
+          select(-starts_with("Y")) %>%
+          mutate(Ym = Y_mat)
+        tic()
+        fit_bayes = refund::bayes_fosr(Ym ~ X, est.method = "Gibbs", data = df)
+        elapsed_time = toc(quiet = TRUE)
+        rm(df)
+
+        stats_bayes = get_coverage_stats_bayes(fit_bayes, beta_true = data$beta_true, L = len) %>%
+          mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
+
+        ret =
+          stats_famm %>%
+          mutate(type = "FAMM") %>%
+          bind_rows(stats_fui %>% mutate(type = "FUI")) %>%
+          bind_rows(stats_bayes %>% mutate(type = "Bayes"))
+        rm(stats_famm, stats_fui, elapsed_time, Y_mat, sample_data, b_hat, ci, data, fit_pffr, fit_bayes, stats_bayes)
+      } else {
+        ret =
+          stats_famm %>%
+          mutate(type = "FAMM") %>%
+          bind_rows(stats_fui %>% mutate(type = "FUI"))
+        rm(stats_famm, stats_fui, elapsed_time, Y_mat, sample_data, b_hat, ci, data, fit_pffr)
+      }
+      # print(iter)
       return(ret)
     })
     x
   },
-  .options = furrr_options(seed = TRUE))
+  .options = furrr_options(seed = TRUE),
+  .progress = TRUE)
 
   result =
     sim_res %>%
@@ -127,15 +175,15 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   #   ggplot(aes(x = var, y = time, color = type)) +
   #   geom_boxplot()
   #
-  # result %>%
-  #   pivot_longer(cols = c(MISE, mean_pw_se, cover_pw)) %>%
-  #   ggplot(aes(x = var, y = value, color = type)) +
-  #   geom_boxplot(outlier.shape = NA)+
-  #   facet_wrap(.~name, scales = "free_y")
+  result %>%
+    pivot_longer(cols = c(MISE, mean_pw_se, cover_pw, time)) %>%
+    ggplot(aes(x = var, y = value, color = type)) +
+    geom_boxplot(outlier.shape = NA)+
+    facet_wrap(.~name, scales = "free_y")
 
   if (!dir.exists(here::here("results", "simulations", "non_survey"))) {
     dir.create(here::here("results", "simulations", "non_survey"), recursive = TRUE)
-    }
+  }
 
   write_rds(result,
             here::here("results", "simulations", "non_survey", fname))

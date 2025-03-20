@@ -132,9 +132,9 @@ get_betatilde = function(data, family = "gaussian",
 }
 
 get_betahat = function(betaTilde, L = 50,
-                       nknots_min = NULL){
+                       nknots_min = 35){
   argvals = 1:L
-  nknots <- min(round(L / 2), nknots_min)
+  nknots <- min(round(L/4), nknots_min)
 
   betaHat <- t(apply(betaTilde, 1, function(x) mgcv::gam(x ~ s(argvals, bs = "tp",
                                                                k = (nknots + 1)),
@@ -145,12 +145,47 @@ get_betahat = function(betaTilde, L = 50,
   return(betaHat)
 }
 
+
+get_betahat_analytic = function(betaTilde, L = 50, splines = "tp",
+                                smooth_method = "GCV.Cp",
+                                nknots_min = 35,
+                                nknots_min_cov = NULL
+                                ){
+    p <- nrow(betaTilde) # Number of fixed effects parameters
+    betaHat <- matrix(NA, nrow = p, ncol = L)
+    lambda <- rep(NA, p)
+    argvals = 1:L
+    nknots <- min(nknots_min,  round(L/4))
+    # Number of knots for covariance matrix
+    nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
+    nknots_fpca <- min(round(L / 2), 35)
+    for (r in 1:p) {
+      fit_smooth <- gam(
+        betaTilde[r,] ~ s(argvals, bs = splines, k = (nknots + 1)),
+        method = smooth_method
+      )
+      betaHat[r,] <- fit_smooth$fitted.values
+      lambda[r] <- fit_smooth$sp # Smoothing parameter
+    }
+
+    sm <- smoothCon(
+      s(argvals, bs = splines, k = (nknots + 1)),
+      data = data.frame(argvals = argvals),
+      absorb.cons = TRUE
+    )
+    S <- sm[[1]]$S[[1]] # Penalty matrix
+    B <- sm[[1]]$X # Basis functions
+    rm(fit_smooth, sm)
+  return(betaHat)
+}
+# b_hat = get_betahat_analytic(betaTilde)
 # betaTilde = get_betatilde(data)
 # betaHat = get_betahat(betaTilde)
 
 run_boots = function(data, betaHat, family = "gaussian",
                      num_boots = 500, set_seed = TRUE, seed = 2025, L = 50,
-                     model_formula = as.formula(paste0('Y~', 'X'))){
+                     model_formula = as.formula(paste0('Y~', 'X')),
+                     parallel = FALSE, ncores_inner = 4){
   argvals = 1:L
 
   out_index <- grep(paste0("^", model_formula[2]), names(data))
@@ -162,7 +197,39 @@ run_boots = function(data, betaHat, family = "gaussian",
   pb <- progress_bar$new(format = "  bootstrapping across L [:bar] :percent eta: :eta",,
                          total = L)
   # get bootstrap estimates at each point along functional domain
-  for(l in 1:L){
+  if(parallel){
+    plan(multisession, workers = ncores_inner)
+    for(l in 1:L) {
+      pb$tick()
+      data$Yl <- unclass(data[, out_index][, argvals[l]])
+
+      if (set_seed) {
+        set.seed(seed)  # Change seed per L
+      }
+
+      coefs <- do.call(
+        cbind,
+        future_lapply(1:num_boots, function(num) {
+          set.seed(l * num)
+          index <- sample(nrow(data), nrow(data), replace = TRUE)
+          dat.tmp <- data[index, ]
+
+          model <- glm(
+            formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
+            data = dat.tmp,
+            family = family
+          )
+          model$coefficients
+        }, future.seed = TRUE,
+        future.scheduling = 1,
+        future.globals = c("data", "model_formula", "family"))
+      )
+
+      betaTilde_boot[, l, ] <- coefs
+    }
+    plan(sequential)
+  } else {
+    for(l in 1:L){
     pb$tick()
     data$Yl <- unclass(data[,out_index][,argvals[l]])
     if(set_seed){
@@ -183,11 +250,100 @@ run_boots = function(data, betaHat, family = "gaussian",
         }))
       betaTilde_boot[,l,] <- coefs
     }
+  }
   return(betaTilde_boot)
 }
 
+eigenval_trim <- function(V) {
+  edcomp <- eigen(V, symmetric = TRUE)
+  eigen.positive <- which(edcomp$values > 0)
+  q <- ncol(V)
 
-get_cis = function(betaTilde_boot,
+  if (length(eigen.positive) == q) {
+    return(V)
+  } else if (length(eigen.positive) == 0) {
+    return(tcrossprod(edcomp$vectors[, 1]) * edcomp$values[1])
+  } else if (length(eigen.positive) == 1) {
+    return(tcrossprod(as.vector(edcomp$vectors[, 1])) * as.numeric(edcomp$values[1]))
+  } else {
+    return(matrix(
+      edcomp$vectors[, eigen.positive] %*%
+        tcrossprod(diag(edcomp$values[eigen.positive]), edcomp$vectors[, eigen.positive]),
+      ncol = q
+    ))
+  }
+}
+
+
+library(zoo)  # For rolling mean (moving average)
+library(Matrix)  # For handling covariance matrices
+
+# Function to apply moving average (Gaussian-weighted)
+sandwich_smooth <- function(mat, kernel_width = 5) {
+  n <- nrow(mat)
+  smoothed_mat <- mat
+
+  # Apply moving average row-wise
+  for (i in 1:n) {
+    smoothed_mat[i, ] <- rollapply(mat[i, ], width = kernel_width, FUN = mean, fill = NA, align = "center", partial = TRUE)
+  }
+
+  # Apply moving average column-wise
+  for (j in 1:n) {
+    smoothed_mat[, j] <- rollapply(smoothed_mat[, j], width = kernel_width, FUN = mean, fill = NA, align = "center", partial = TRUE)
+  }
+
+  return(smoothed_mat)
+}
+
+get_cis_analytic = function(betaHat, betaTilde, L = 50, data){
+  p = nrow(betaHat) # number of beta coefs
+  designmat = cbind(rep(1, nrow(data)), data$X) # design matrix X
+  Y_mat = data %>% # Y matrix
+    select(starts_with("Y")) %>%
+    as.matrix()
+
+  Y_pred = designmat %*% betaTilde # y = x beta
+  resid_mat = Y_mat - Y_pred # residual matrix
+  n = nrow(Y_mat)
+
+  R_hat = matrix(NA, nrow = L, ncol = L) # covariance matrix of Ys
+  for (l1 in 1:L) {
+    for (l2 in 1:L) {
+      if (l1 == l2) {
+        R_hat[l1, l2] = (1 / (n - p)) * sum((resid_mat[,l1]^2)) # if l1 = l2, use residual variance as estimate
+      } else{
+        R_hat[l1, l2] = mean(resid_mat[,l1] * resid_mat[,l2]) # method of moments estimator
+      }
+    }
+  }
+
+
+  XTX_inv <- solve(t(designmat) %*% designmat) # precompute
+  betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
+  for (l1 in 1:len) {
+    for (l2 in 1:len) {
+      betaHat.var[l1, l2, ] <- diag((XTX_inv %*% t(designmat) * R_hat[l1, l2]) %*% designmat %*% XTX_inv)
+    }
+  }
+  # smooth
+  betaHat.var.smooth <- array(NA, dim = dim(betaHat.var))
+  for (r in 1:nrow(betaHat)) {
+    betaHat.var.smooth[, , r] <- sandwich_smooth(betaHat.var[, , r])
+    # Ensure positive definite
+    betaHat.var[, , r] <- pmax(0, betaHat.var[, , r])
+    betaHat.var.smooth[, , r] <- eigenval_trim(betaHat.var.smooth[, , r])
+  }
+
+  return(list(
+    betaHat = betaHat,
+    betaHat.var = betaHat.var.smooth
+  ))
+}
+
+
+
+get_cis_boot = function(betaTilde_boot,
                    betaHat,
                    smooth_for_ci = TRUE,
                    smooth_for_variance = TRUE,
@@ -263,53 +419,117 @@ get_cis = function(betaTilde_boot,
 # mod_output = get_cis(res[[1]], betaHat = betaHat)
 #
 
-get_coverage_stats_fui = function(mod_output, beta_true, L){
-  MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
-  mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
-  mean_joint_se <- numeric(nrow(beta_true))  # Store mean CI width
+get_coverage_stats_fui = function(mod_output, beta_true, L, type = "boot"){
+  if(type == "boot"){
+    MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
+    mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
+    mean_joint_se <- numeric(nrow(beta_true))  # Store mean CI width
 
-  cover_joint <- logical(nrow(beta_true))  # Using logical instead of NA-filled vector
-  cover_pw <- matrix(FALSE, nrow(beta_true), L)
+    cover_joint <- logical(nrow(beta_true))  # Using logical instead of NA-filled vector
+    cover_pw <- matrix(FALSE, nrow(beta_true), L)
 
-  # Extract the diagonal elements of each variance matrix upfront
-  sqrt_diag_var <- apply(mod_output$betaHat.var, 3, function(mat) sqrt(diag(mat)))
+    # Extract the diagonal elements of each variance matrix upfront
+    sqrt_diag_var <- apply(mod_output$betaHat.var, 3, function(mat) sqrt(diag(mat)))
 
-  # Loop efficiently
-  for (p in seq_along(cover_joint)) {
-    true <- beta_true[p,]
-    sqrt_diag_p <- sqrt_diag_var[, p]  # Extract precomputed diagonal elements
+    # Loop efficiently
+    for (p in seq_along(cover_joint)) {
+      true <- beta_true[p,]
+      sqrt_diag_p <- sqrt_diag_var[, p]  # Extract precomputed diagonal elements
 
-    # Compute upper and lower bounds in one step
-    margin <- mod_output$qn[p] * sqrt_diag_p
-    mean_joint_se[p] <- mean(margin)
+      # Compute upper and lower bounds in one step
+      margin <- mod_output$qn[p] * sqrt_diag_p
+      mean_joint_se[p] <- mean(margin)
 
-    upper <- mod_output$betaHat[p,] + margin
-    lower <- mod_output$betaHat[p,] - margin
+      upper <- mod_output$betaHat[p,] + margin
+      lower <- mod_output$betaHat[p,] - margin
 
-    margin_pw <- 1.96 * sqrt_diag_p
-    upper_pw <- mod_output$betaHat[p,] + margin_pw
-    lower_pw <- mod_output$betaHat[p,] - margin_pw
+      margin_pw <- 1.96 * sqrt_diag_p
+      upper_pw <- mod_output$betaHat[p,] + margin_pw
+      lower_pw <- mod_output$betaHat[p,] - margin_pw
 
-    # Compute joint and pointwise coverage efficiently
-    covered <- (lower < true) & (upper > true)
-    covered_pw <- (lower_pw < true) & (upper_pw > true)
+      # Compute joint and pointwise coverage efficiently
+      covered <- (lower < true) & (upper > true)
+      covered_pw <- (lower_pw < true) & (upper_pw > true)
 
-    cover_joint[p] <- all(covered)  # Joint coverage check
-    cover_pw[p, ] <- covered_pw     # Assign logical vector directly
+      cover_joint[p] <- all(covered)  # Joint coverage check
+      cover_pw[p, ] <- covered_pw     # Assign logical vector directly
+    }
+    cover_pw_int = which(cover_pw[1, ])
+    cover_pw_x = which(cover_pw[2, ])
+    result = tibble(
+      MISE = MISE %>% unname(),
+      mean_joint_se = mean_joint_se,
+      mean_pw_se = mean_pw_se,
+      cover_joint = cover_joint,
+      cover_pw = rowSums(cover_pw) / L,
+      var = rownames(beta_true)) %>%
+      mutate(vector_col = map(var, ~ ifelse(.x  == "Intercept", list(cover_pw_int), list(cover_pw_x))))
+  } else if (type == "analytic"){
+    MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
+    mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
+
+    cover_joint <- rep(NA, 2) # Using logical instead of NA-filled vector
+    cover_pw <- matrix(FALSE, nrow(beta_true), L)
+
+    # Extract the diagonal elements of each variance matrix upfront
+    sqrt_diag_var <- apply(mod_output$betaHat.var, 3, function(mat) sqrt(diag(mat)))
+
+    # Loop efficiently
+    for (p in seq_along(cover_joint)) {
+      true <- beta_true[p,]
+      sqrt_diag_p <- sqrt_diag_var[, p]  # Extract precomputed diagonal elements
+
+
+      margin_pw <- 1.96 * sqrt_diag_p
+      upper_pw <- mod_output$betaHat[p,] + margin_pw
+      lower_pw <- mod_output$betaHat[p,] - margin_pw
+
+      covered_pw <- (lower_pw < true) & (upper_pw > true)
+
+      cover_pw[p, ] <- covered_pw     # Assign logical vector directly
+    }
+    cover_pw_int = which(cover_pw[1, ])
+    cover_pw_x = which(cover_pw[2, ])
+    result = tibble(
+      MISE = MISE %>% unname(),
+      mean_joint_se = NA_real_,
+      mean_pw_se = mean_pw_se,
+      cover_joint = NA_real_,
+      cover_pw = rowSums(cover_pw) / L,
+      var = rownames(beta_true)) %>%
+      mutate(vector_col = map(var, ~ ifelse(.x  == "Intercept", list(cover_pw_int), list(cover_pw_x))))
   }
+  return(result)
+
+}
+
+
+get_coverage_stats_bayes = function(res, beta_true, L = 50){
+  beta_hat_bayes = res$beta.hat
+  lb = res$beta.LB
+  ub = res$beta.UB
+  width = ub - lb
+  se = width / 2 / 1.96
+  MISE = rowMeans((beta_hat_bayes - beta_true)^2)
+  mean_pw_se = apply(se, 1, mean)
+
+  cover_pw = matrix(FALSE, nrow(beta_true), L)
+  for(p in seq_along(MISE)){
+    cover_upper = which(ub[p,] > beta_true[p,])
+    cover_lower = which(lb[p,] < beta_true[p,])
+    cover_pw[p, intersect(cover_lower, cover_upper)] = TRUE
+  }
+
   cover_pw_int = which(cover_pw[1, ])
   cover_pw_x = which(cover_pw[2, ])
+
   tibble(
     MISE = MISE %>% unname(),
-    mean_joint_se = mean_joint_se,
     mean_pw_se = mean_pw_se,
-    cover_joint = cover_joint,
     cover_pw = rowSums(cover_pw) / L,
     var = rownames(beta_true)) %>%
     mutate(vector_col = map(var, ~ ifelse(.x  == "Intercept", list(cover_pw_int), list(cover_pw_x))))
 }
-
-
 
 get_coverage_stats_famm = function(res, beta_true, L = 50){
   coef_pffr = coef(res, n1 = L)
