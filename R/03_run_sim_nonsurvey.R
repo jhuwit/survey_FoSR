@@ -48,8 +48,6 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
     ncores_outer = ceiling(ncores_total / 2)
     ncores_inner = ncores_total - ncores_outer
   }
-  # iter = 1
-  # nsims = 1
   plan(multisession, workers = ncores_outer)
   sim_res <- future_map(1:nsims, function(iter) {
     x = try({
@@ -170,6 +168,7 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   .options = furrr_options(seed = TRUE),
   .progress = TRUE)
 
+  sim_res
   result =
     sim_res %>%
     keep(., is.data.frame) %>%
@@ -181,11 +180,11 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   #   ggplot(aes(x = var, y = time, color = type)) +
   #   geom_boxplot()
   #
-  result %>%
-    pivot_longer(cols = c(MISE, mean_pw_se, cover_pw, time)) %>%
-    ggplot(aes(x = var, y = value, color = type)) +
-    geom_boxplot(outlier.shape = NA)+
-    facet_wrap(.~name, scales = "free_y")
+  # result %>%
+  #   pivot_longer(cols = c(MISE, mean_pw_se, cover_pw, time)) %>%
+  #   ggplot(aes(x = var, y = value, color = type)) +
+  #   geom_boxplot(outlier.shape = NA)+
+  #   facet_wrap(.~name, scales = "free_y")
 
   if (!dir.exists(here::here("results", "simulations", "non_survey"))) {
     dir.create(here::here("results", "simulations", "non_survey"), recursive = TRUE)
