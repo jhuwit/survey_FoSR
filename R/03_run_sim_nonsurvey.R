@@ -20,7 +20,7 @@ library(tidyverse)
 library(parallel)
 source(here::here("R", "sim_functions_unwt.R"))
 ncores_total = parallelly::availableCores() - 1
-force = FALSE
+force = TRUE
 
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
@@ -97,7 +97,7 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
 
         ci = get_cis_analytic(betaHat = b_hat, betaTilde = beta_tilde, L = len, data = sample_data)
         elapsed_time = toc(quiet = TRUE)
-        stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = len, type = "analytic") %>%
+        stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = len) %>%
           mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
       }
 

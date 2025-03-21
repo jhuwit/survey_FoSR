@@ -318,8 +318,8 @@ get_cis_analytic = function(betaHat, betaTilde, L = 50, data){
 
   XTX_inv <- solve(t(designmat) %*% designmat) # precompute
   betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
-  for (l1 in 1:len) {
-    for (l2 in 1:len) {
+  for (l1 in 1:L) {
+    for (l2 in 1:L) {
       betaHat.var[l1, l2, ] <- diag((XTX_inv %*% t(designmat) * R_hat[l1, l2]) %*% designmat %*% XTX_inv)
     }
   }
@@ -328,13 +328,33 @@ get_cis_analytic = function(betaHat, betaTilde, L = 50, data){
   for (r in 1:nrow(betaHat)) {
     betaHat.var.smooth[, , r] <- sandwich_smooth(betaHat.var[, , r])
     # Ensure positive definite
-    betaHat.var[, , r] <- pmax(0, betaHat.var[, , r])
+    # betaHat.var[, , r] <- pmax(0, betaHat.var[, , r])
     betaHat.var.smooth[, , r] <- eigenval_trim(betaHat.var.smooth[, , r])
+  }
+
+  for (r in 1:nrow(betaHat)) {
+    betaHat.var.smooth[, , r] <- refund::fbps(betaHat.var[, , r])$Yhat
+    # Ensure positive definite
+    # betaHat.var[, , r] <- pmax(0, betaHat.var[, , r])
+    betaHat.var.smooth[, , r] <- eigenval_trim(betaHat.var.smooth[, , r])
+  }
+
+  qn <- rep(0, length = nrow(betaHat))
+  N <- 10000 ## sample size in simulation-based approach
+  for (i in 1:length(qn)) {
+    Sigma <- betaHat.var.smooth[, , i]
+    x_sample <- rmvnorm(N, mean = betaHat[i, ], sigma = Sigma)
+    un <- rep(NA, N)
+    for (j in 1:N) {
+      un[j] <- max(abs((x_sample[j, ] - betaHat[i, ]) / sqrt(diag(Sigma))))
+    }
+    qn[i] <- quantile(un, 0.95)
   }
 
   return(list(
     betaHat = betaHat,
-    betaHat.var = betaHat.var.smooth
+    betaHat.var = betaHat.var.smooth,
+    qn = qn
   ))
 }
 
@@ -416,8 +436,7 @@ get_cis_boot = function(betaTilde_boot,
 # mod_output = get_cis(res[[1]], betaHat = betaHat)
 #
 
-get_coverage_stats_fui = function(mod_output, beta_true, L, type = "boot"){
-  if(type == "boot"){
+get_coverage_stats_fui = function(mod_output, beta_true, L){
     MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
     mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
     mean_joint_se <- numeric(nrow(beta_true))  # Store mean CI width
@@ -461,41 +480,6 @@ get_coverage_stats_fui = function(mod_output, beta_true, L, type = "boot"){
       cover_pw = rowSums(cover_pw) / L,
       var = rownames(beta_true)) %>%
       mutate(vector_col = map(var, ~ ifelse(.x  == "Intercept", list(cover_pw_int), list(cover_pw_x))))
-  } else if (type == "analytic"){
-    MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
-    mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
-
-    cover_joint <- rep(NA, 2) # Using logical instead of NA-filled vector
-    cover_pw <- matrix(FALSE, nrow(beta_true), L)
-
-    # Extract the diagonal elements of each variance matrix upfront
-    sqrt_diag_var <- apply(mod_output$betaHat.var, 3, function(mat) sqrt(diag(mat)))
-
-    # Loop efficiently
-    for (p in seq_along(cover_joint)) {
-      true <- beta_true[p,]
-      sqrt_diag_p <- sqrt_diag_var[, p]  # Extract precomputed diagonal elements
-
-
-      margin_pw <- 1.96 * sqrt_diag_p
-      upper_pw <- mod_output$betaHat[p,] + margin_pw
-      lower_pw <- mod_output$betaHat[p,] - margin_pw
-
-      covered_pw <- (lower_pw < true) & (upper_pw > true)
-
-      cover_pw[p, ] <- covered_pw     # Assign logical vector directly
-    }
-    cover_pw_int = which(cover_pw[1, ])
-    cover_pw_x = which(cover_pw[2, ])
-    result = tibble(
-      MISE = MISE %>% unname(),
-      mean_joint_se = NA_real_,
-      mean_pw_se = mean_pw_se,
-      cover_joint = NA_real_,
-      cover_pw = rowSums(cover_pw) / L,
-      var = rownames(beta_true)) %>%
-      mutate(vector_col = map(var, ~ ifelse(.x  == "Intercept", list(cover_pw_int), list(cover_pw_x))))
-  }
   return(result)
 
 }
