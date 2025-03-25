@@ -200,7 +200,7 @@ sim_res = list(betaHat = betaHat,
                qn = qn,
                pffr_mod = model)
 
-save(sim_res, here::here("data", "steps_model.Rda"))
+write_rds(sim_res, here::here("data", "steps_model.Rda"))
 get_plot_df = function(sim_res) {
   num_var = nrow(sim_res$betaHat)
   map_dfr(
