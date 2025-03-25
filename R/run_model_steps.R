@@ -83,6 +83,8 @@ pb <- progress_bar$new(format = "  bootstrapping across L [:bar] :percent eta: :
 # get bootstrap estimates at each point along functional domain
 
 library(future.apply)
+set_seed = TRUE
+seed = 1234
 for(l in 1:L){
   pb$tick()
   data$Yl <- unclass(data[, out_index][, l]) %>% unlist() %>% unname() %>% round(., digits = 0)
