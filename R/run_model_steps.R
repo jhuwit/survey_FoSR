@@ -91,7 +91,7 @@ for(l in 1:L){
   if(set_seed){
     set.seed(seed)
   }
-  plan(multisession, workers = parallel::detectCores() - 1)  # Adjust workers if needed
+  plan(multisession, workers = 7)  # Adjust workers if needed
 
   coefs <- do.call(
     cbind,
