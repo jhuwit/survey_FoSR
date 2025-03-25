@@ -84,6 +84,8 @@ pb <- progress_bar$new(format = "  bootstrapping across L [:bar] :percent eta: :
 
 library(future.apply)
 set_seed = TRUE
+plan(multisession, workers = 7)  # Adjust workers if needed
+
 seed = 1234
 for(l in 1:L){
   pb$tick()
@@ -91,7 +93,6 @@ for(l in 1:L){
   if(set_seed){
     set.seed(seed)
   }
-  plan(multisession, workers = 7)  # Adjust workers if needed
 
   coefs <- do.call(
     cbind,
