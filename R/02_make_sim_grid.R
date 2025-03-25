@@ -45,7 +45,7 @@ sim_settings = expand_grid(
 
 write_rds(sim_settings, here::here("sim_data", "sim_settings_inf.rds"))
 
-n = c(500, 1000, 2500, 5000, 10000)
+n = c(500, 1000, 5000, 10000)
 sigma = c(0.5, 1, 1.5)
 families = c("gaussian", "binomial", "poisson")
 scenarios = c(1, 2)
@@ -64,14 +64,35 @@ sim_settings = expand_grid(
 # repetitive bc don't need noise for poisson or binomial
 extra = sim_settings %>%
   filter(family != "gaussian") %>%
-  group_by(n, scenario, num_boots, L) %>%
   filter(sigma == 0.5) %>%
   pull(fold)
 
+extra2 =
+  sim_settings %>%
+  filter(family == "gaussian") %>%
+  filter(num_boots == 100) %>%
+  pull(fold)
 
 sim_settings =
   sim_settings %>%
-  filter(!(fold %in% extra)) %>%
+  filter(!(fold %in% c(extra, extra2))) %>%
+  arrange(L, n) %>%
   mutate(fold = row_number())
 write_rds(sim_settings, here::here("sim_data", "sim_settings_nonsurvey.rds"))
+
+
+
+## find low L settings
+
+sim_settings %>%
+  filter(L < 1000) %>%
+  pull(fold) %>%
+  paste(., collapse = ",")
+
+sim_settings %>%
+  filter(L >= 1000) %>%
+  pull(fold) %>%
+  paste(., collapse = ",")
+
+
 

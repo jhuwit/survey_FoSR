@@ -343,7 +343,7 @@ get_cis_analytic = function(betaHat, betaTilde, L = 50, data){
   N <- 10000 ## sample size in simulation-based approach
   for (i in 1:length(qn)) {
     Sigma <- betaHat.var.smooth[, , i]
-    x_sample <- rmvnorm(N, mean = betaHat[i, ], sigma = Sigma)
+    x_sample <- mvtnorm::rmvnorm(N, mean = betaHat[i, ], sigma = Sigma)
     un <- rep(NA, N)
     for (j in 1:N) {
       un[j] <- max(abs((x_sample[j, ] - betaHat[i, ]) / sqrt(diag(Sigma))))
