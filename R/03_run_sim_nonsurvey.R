@@ -25,6 +25,7 @@ force = TRUE
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
 ifold = get_fold()
+# ifold = 111
 fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
 
@@ -41,7 +42,11 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   samp_size = tmp_settings$n
   nsims = 500
   len = tmp_settings$L
-  run_bayes = TRUE
+  if(samp_size > 1000 || len > 1000){
+    run_bayes = FALSE
+  } else{
+    run_bayes = TRUE
+  }
   if(family == "gaussian"){ # if gaussian, we don't need to bootstrap so don't need inner parallelization
     ncores_outer = ncores_total
   } else{
@@ -91,6 +96,7 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
         beta_tilde =
           sample_data %>%
           get_betatilde(., family = family)
+
 
         b_hat = beta_tilde %>%
           get_betahat(., L = len)
