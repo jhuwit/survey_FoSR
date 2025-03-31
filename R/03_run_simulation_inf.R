@@ -7,7 +7,7 @@ source(here::here("R", "00_data_gen_function_inf.R"))
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_inf.rds"))
 ifold = get_fold()
-fname = paste0("siminf_fold_", sprintf("%03d", ifold), ".rds")
+fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
 nsim = 500
 parallel = TRUE
