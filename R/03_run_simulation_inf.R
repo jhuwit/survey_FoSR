@@ -299,11 +299,11 @@ rownames(beta_true) <- c("Intercept", "x")
 I = 10e6 # superpopulation size
 lst = generate_superpopulation(scenario = scenario,
                                family = family,
-                               I = 10e5)
+                               I = 10e6)
 fpcay = refund::fpca.face(lst$Y_obs, center = TRUE)
 
 I_n = 50
-
+sim_all <- list()
 
 sim_res <- list() ## store simulation results
 for (iter in 1:nsim) {
