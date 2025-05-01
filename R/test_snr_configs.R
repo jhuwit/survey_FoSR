@@ -28,7 +28,7 @@ settings = expand_grid(slope = c("fixed", "random"),
 sim_list <- list()
 for(row in 1:nrow(settings)){
   temp = settings[row, ]
-  I = 10e5
+  I = 10e6
   L = 50
   family = "gaussian"
   seed = 4576
@@ -249,3 +249,4 @@ for(row in 1:nrow(settings)){
   rm(sim_res_df)
 }
 
+write_rds(sim_list, here::here("results", "snr_configs.rds"))
