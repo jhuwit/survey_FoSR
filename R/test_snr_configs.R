@@ -88,6 +88,7 @@ for(row in 1:nrow(settings)){
   psu_effects_indiv <- psu_random_effects[as.numeric(factor(psu_assignments)), ]
   random_effects <- strata_effects_indiv + psu_effects_indiv
 
+  rm(strata_effects_indiv, psu_effects_indiv)
   ## Add stratum-specific slope modifications
   set.seed(seed)
   stratum_scaling <- rnorm(num_strata, mean = 1, sd = sd_beta)
@@ -105,6 +106,7 @@ for(row in 1:nrow(settings)){
     fixef_signal <- matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
       X_des[, 2] * beta1_by_indiv
     ranef <- sd(fixef_signal)/sd(random_effects)/snr_b*random_effects
+    rm(random_effects)
   } else {
     fixef_signal <- matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
       X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
@@ -114,6 +116,7 @@ for(row in 1:nrow(settings)){
       matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
     ranef <- slope_re + random_effects
     ranef <- sd(fixef_signal)/sd(ranef)/snr_b * ranef
+    rm(random_effects)
   }
 
   sd_lp = sd(as.vector(t(fixef_signal)) + as.vector(t(ranef)))
@@ -186,6 +189,7 @@ for(row in 1:nrow(settings)){
 
 
     data =  cbind(dat.sim, Y_sample)
+    rm(dat.sim, Y_sample)
     parallel = TRUE
     ncores = parallelly::availableCores() - 1
     boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
@@ -237,14 +241,14 @@ for(row in 1:nrow(settings)){
     rm(cis,
        res,
        betaHat,
-       betaTilde,
-       dat.sim,
-       Y_sample)
+       betaTilde)
     sim_res[[iter]] <- stats
     print(iter)
   }
   sim_res_df = bind_rows(sim_res, .id = "iter")
-  rm(sim_res)
+  rm(sim_res, X_des, Y_obs, stratum_assignments, psu_assignments,
+     psu_effects_indiv, strata_effects_indiv, random_effects,
+     fixef_signal, beta1_by_stratum, beta1_by_indiv)
   sim_list[[row]] = sim_res_df
   rm(sim_res_df)
 }
