@@ -22,7 +22,7 @@ source(here::here("R", "01_sim_functions.R"))
 
 settings = expand_grid(slope = c("fixed", "random"),
                        snr_b = c(1, 2.5, 5),
-                       snr_eps = c(1, 2.5, 5),
+                       snr_eps = c(.25, 5, 1),
                        psu_re = c(.5, .25))
 
 sim_list <- list()
@@ -253,4 +253,4 @@ for(row in 1:nrow(settings)){
   rm(sim_res_df)
 }
 
-write_rds(sim_list, here::here("results", "snr_configs.rds"))
+write_rds(sim_list, here::here("results", "snr_configs2.rds"))
