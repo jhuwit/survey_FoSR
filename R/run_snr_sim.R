@@ -194,7 +194,7 @@ for (iter in 1:nsim) {
 
   data =  cbind(dat.sim, Y_sample)
   rm(dat.sim, Y_sample)
-  parallel = FALSE
+  parallel = TRUE
   ncores = parallelly::availableCores() - 1
   boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
   fit_types = c('design', 'design', 'design', 'weighted', 'none')
@@ -276,3 +276,48 @@ if(!dir.exists(here::here("results", "snr"))){
   dir.create(here::here("results", "snr"), recursive = TRUE)
 }
 write_rds(sim_res_df, here::here("results", "snr", paste0("fold_", fold, ".rds")))
+
+
+#####
+get_plot_df = function(sim_res, tname){
+  num_var = nrow(sim_res$betaHat)
+  map_dfr(.x = 1:num_var,
+          .f = function(r){
+            data.frame(s = 1:length(sim_res$betaHat[r,]),
+                       beta = sim_res$betaHat[r,],
+                       lower = sim_res$betaHat[r, ] - 2 * sqrt(diag(sim_res$betaHat.var[, , r])),
+                       upper = sim_res$betaHat[r, ] + 2 * sqrt(diag(sim_res$betaHat.var[, , r])),
+                       lower.joint = sim_res$betaHat[r, ] - sim_res$qn[r] *
+                         sqrt(diag(sim_res$betaHat.var[, , r])),
+                       upper.joint = sim_res$betaHat[r, ] + sim_res$qn[r] * sqrt(diag(sim_res$betaHat.var[, , r]))) %>%
+              mutate(name = sim_res$betaHat %>% rownames() %>% .[r])
+          }) %>%
+    mutate(varname = tname)
+}
+plot_objs = map2(.x = cis, .y = boot_types, .f = get_plot_df) %>% bind_rows()
+
+btrue =
+  beta_fixed %>%
+  as_tibble() %>%
+  mutate(beta = c("beta_0", "beta_1")) %>%
+  pivot_longer(cols = -beta) %>%
+  mutate(x = as.numeric(sub(".*V", "", name)),
+         type = "betaTrue")
+
+btrue_df =
+  btrue %>%
+  mutate(name = if_else(beta == "beta_0", "(Intercept)", "X")) %>%
+  select(-beta) %>%
+  rename(s = x, beta = value)
+plot_objs %>%
+  ggplot(aes(x = s, y = beta)) +
+  geom_line()  +
+  facet_grid(varname~name) +
+  geom_ribbon(aes(x = s, ymin = lower, ymax = upper), alpha = .3,
+              fill = "gray10") +
+  geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint), alpha = .3,
+              fill = "gray20") +
+  labs(x = "L", y = "Estimate") +
+  theme_classic() +
+  geom_line(data = btrue_df, aes(x = s, y = beta), color = "red")
+
