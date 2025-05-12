@@ -244,16 +244,14 @@ for (iter in 1:nsim) {
       num_boots = 500,
       set_seed = TRUE,
       seed = 2025,
-      L = 50,
-      .options = furrr_options(seed = TRUE)
+      L = 50
     )
 
     cis = map2(
       .x = res,
       .y = betaHat,
       .f = get_cis,
-      smooth_for_ci = TRUE,
-      .options = furrr_options(seed = TRUE)
+      smooth_for_ci = TRUE
     )
   }
 
