@@ -19,6 +19,7 @@ library(mvtnorm)
 library(refund)
 library(svrep)
 source(here::here("R", "01_sim_functions.R"))
+source(here::here("R", "utils.R"))
 
 settings = expand_grid(slope = "random",
                        snr_b = c(2.5, 5),
