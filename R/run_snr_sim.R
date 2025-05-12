@@ -29,7 +29,7 @@ settings = expand_grid(slope = "random",
 
 ifold = get_fold()
 
-
+# ifold = 10
 temp = settings[ifold, ]
 I = 10e6
 L = 50
@@ -44,7 +44,7 @@ sampled_strata = 30
 I_n = temp$I_n
 snr_b = temp$snr_b
 snr_eps = temp$snr_eps
-nsim = 200
+nsim = 50
 
 grid <- seq(0, 1, length = L)
 beta_fixed <- matrix(NA, 2, L)
@@ -194,7 +194,7 @@ for (iter in 1:nsim) {
 
   data =  cbind(dat.sim, Y_sample)
   rm(dat.sim, Y_sample)
-  parallel = TRUE
+  parallel = FALSE
   ncores = parallelly::availableCores() - 1
   boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
   fit_types = c('design', 'design', 'design', 'weighted', 'none')
@@ -209,29 +209,54 @@ for (iter in 1:nsim) {
 
   betaHat = map(.x = betaTilde, get_betahat)
 
-  plan(multisession, workers = ncores)
-  res = future_map2(
-    .x = boot_types,
-    .y = betaHat,
-    .f = run_boots,
-    data = data,
-    family = family,
-    # num_boots = 100,
-    num_boots = 500,
-    set_seed = TRUE,
-    seed = 2025,
-    L = 50,
-    .options = furrr_options(seed = TRUE)
-  )
+  if(parallel){
+    plan(multisession, workers = ncores)
+    res = future_map2(
+      .x = boot_types,
+      .y = betaHat,
+      .f = run_boots,
+      data = data,
+      family = family,
+      # num_boots = 100,
+      num_boots = 500,
+      set_seed = TRUE,
+      seed = 2025,
+      L = 50,
+      .options = furrr_options(seed = TRUE)
+    )
 
-  cis = future_map2(
-    .x = res,
-    .y = betaHat,
-    .f = get_cis,
-    smooth_for_ci = TRUE,
-    .options = furrr_options(seed = TRUE)
-  )
-  plan(sequential)
+    cis = future_map2(
+      .x = res,
+      .y = betaHat,
+      .f = get_cis,
+      smooth_for_ci = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )
+    plan(sequential)
+  } else{
+    res = map2(
+      .x = boot_types,
+      .y = betaHat,
+      .f = run_boots,
+      data = data,
+      family = family,
+      # num_boots = 100,
+      num_boots = 500,
+      set_seed = TRUE,
+      seed = 2025,
+      L = 50,
+      .options = furrr_options(seed = TRUE)
+    )
+
+    cis = map2(
+      .x = res,
+      .y = betaHat,
+      .f = get_cis,
+      smooth_for_ci = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )
+  }
+
 
 
   stats = map2(
