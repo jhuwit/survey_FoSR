@@ -221,6 +221,7 @@ run_boots_old = function(data, boot_type, betaHat, family = "gaussian",
 
 run_boots = function(data, boot_type, betaHat, family = "gaussian",
                      num_boots = 500, set_seed = TRUE, seed = 2025, L = 50,
+                     samp_stages = NULL,
                      model_formula = as.formula(paste0('Y~', 'X'))){
   argvals = 1:L
   if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "Preston", "no_design_bootweight", "weighted", "none"))){
@@ -249,7 +250,7 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
   for(l in 1:L){
     pb$tick()
     data$Yl <- unclass(data[,out_index][,argvals[l]])
-    svy_design <- svydesign(ids = ~ psu,
+    svy_design <- svydesign(ids = ~ psu + ID,
                             strata = ~ strata,
                             weights = ~ weight,
                             data = data,
@@ -261,7 +262,7 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
       bs_design <- suppressWarnings(svy_design %>%
                                       as_bootstrap_design(
                                         type = boot_type,
-                                        samp_method_by_stage = c("Poisson"),
+                                        samp_method_by_stage = samp_stages,
                                         replicates = num_boots
                                       ))
       coef.output = svyglm(formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),

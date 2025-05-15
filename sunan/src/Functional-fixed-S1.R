@@ -74,7 +74,7 @@ simulate_survey_fosr <- function(I = 10000, # total subjects
 
   for (g in sampled_clusters) {
     cluster_inds <- which(cluster_assignment == g)
-    scaling_factor <- length(cluster_inds)/10 # TBD
+    scaling_factor <- length(cluster_inds)/10 # TBD what is this for
 
     inclusion_probs <- exp(X_des[cluster_inds, 2])  # Compute individual inclusion probabilities
     inclusion_probs <- inclusion_probs / sum(inclusion_probs) * scaling_factor# Normalize probabilities
@@ -93,7 +93,7 @@ simulate_survey_fosr <- function(I = 10000, # total subjects
   dat.sim <- data.frame(
     ID = final_sample,
     X = X_des[final_sample,2],
-    strata = 1, # Assume same strata here
+    strata = 1, # Assume same strata here ??
     psu = cluster_assignment[final_sample],
     weight = survey_weights[final_sample]
   )
