@@ -49,7 +49,7 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) ||
 
   lst = generate_superpopulation(scenario = 1,
                                  family = "gaussian",
-                                 I = 10e5,
+                                 I = 10e6,
                                  psu_sigma = psu_sigma,
                                  snr_b = temp$snr_b,
                                  snr_eps = temp$snr_eps)
