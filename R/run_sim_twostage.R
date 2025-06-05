@@ -26,7 +26,10 @@ ifold = get_fold()
 fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
 nsim = 250
+B = 500
 parallel = TRUE
+force = TRUE
+
 ncores = parallelly::availableCores() - 1
 fit_types = c('weighted', 'weighted', 'weighted', 'weighted', 'unweighted', 'unweighted')
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted', 'weighted', 'unweighted')
