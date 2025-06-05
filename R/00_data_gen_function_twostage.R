@@ -178,6 +178,7 @@ sample_from_population <- function(X_des, # design matrix
                                       psu_assignments, # assignment to psu (w/in strata)
                                       L = 50 # length of fnl domain
 ){
+  I = nrow(X_des)
   X1 = X_des[, 2]
   # select strata (use all for now)
   selected_strata = 1:num_strata
