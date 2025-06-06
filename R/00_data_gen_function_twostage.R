@@ -59,7 +59,7 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     # s = 1
     set.seed(seed + s)
     num_in_strata = sum(stratum_assignments == s)
-    num_psu = round(runif(1, 100, 200), 0)
+    num_psu = round(runif(1, 200, 500), 0)
     set.seed(seed + s)
     dps = gtools::rdirichlet(1, rep(1, num_psu))
     set.seed(seed + s)
