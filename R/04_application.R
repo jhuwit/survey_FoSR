@@ -17,7 +17,16 @@ steps_df_small =
   summarize(name = first(name),
             value = mean(value, na.rm = TRUE)) %>%
   ungroup() %>%
-  pivot_wider(names_from = name, values_from = value)
+  pivot_wider(names_from = name, values_from = value) %>%
+  mutate(race_cat =
+           case_when(race_hispanic_origin == "Non-Hispanic White" ~ "NH White",
+                     race_hispanic_origin == "Non-Hispanic Black" ~ "NH Black",
+                     race_hispanic_origin %in% c("Other Hispanic", "Mexican American") ~ "Hispanic",
+                     .default = "Other"))
+
+steps_df_small =
+  steps_df_small %>%
+  mutate(race_cat = factor(race_cat, levels = c("NH White", "NH Black", "Hispanic", "Other")))
 
 
 fit_types = c('weighted', 'weighted', 'weighted', 'unweighted')
@@ -37,7 +46,7 @@ data =
 
 
 get_betatilde = function(data, family = "gaussian", type = "weighted",
-                         model_formula = as.formula(paste0('Y~', 'age_cat + sex_bin + race_hispanic_origin'))){
+                         model_formula = as.formula(paste0('Y~', 'age_cat + sex_bin + race_cat'))){
   if(!(type %in% c("weighted", "unweighted"))){
     stop("please specify boot_type as one of 'weighted', 'unweighted'")
   }
@@ -88,7 +97,7 @@ get_betatilde = function(data, family = "gaussian", type = "weighted",
   return(betaTilde)
 }
 betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = "poisson",
-                model_formula = as.formula(paste0('Y~', 'age_cat + sex_bin + race_hispanic_origin')))
+                model_formula = as.formula(paste0('Y~', 'age_cat + sex_bin + race_cat')))
 betaHat = map(.x = betaTilde, .f = get_betahat, L = 49)
 # get_betahat(betaTilde[[1]], L = 49)
 
@@ -217,17 +226,92 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
 
 data = data %>%
   mutate(ID = SEQN)
-res = map2(
+
+library(future)
+library(furrr)
+plan(multisession, workers = ncores)
+
+res = future_map2(
   .x = boot_types,
   .y = betaHat,
   .f = run_boots,
   data = data,
   family = "poisson",
-  num_boots = 10,
+  num_boots = 500,
   set_seed = TRUE,
   seed = 2025,
   L = 49,
-  model_formula = as.formula(paste0('Y~', 'age_cat + sex_bin + race_hispanic_origin'))
-  # .options = furrr_options(seed = TRUE)
+  model_formula = as.formula(paste0('Y~', 'age_cat + sex_bin + race_cat')),
+  .options = furrr_options(seed = TRUE)
+)
+cis = future_map2(
+  .x = res,
+  .y = betaHat,
+  .f = get_cis,
+  smooth_for_ci = TRUE,
+  .options = furrr_options(seed = TRUE)
 )
 
+plan(sequential)
+
+write_rds(cis, here::here("results", "application.rds"))
+# res = map2(
+#   .x = boot_types,
+#   .y = betaHat,
+#   .f = run_boots,
+#   data = data,
+#   family = "poisson",
+#   num_boots = 10,
+#   set_seed = TRUE,
+#   seed = 2025,
+#   L = 49,
+#   model_formula = as.formula(paste0('Y~', 'age_cat + sex_bin + race_cat'))
+#   # .options = furrr_options(seed = TRUE)
+# )
+# cis = map2(
+#   .x = res,
+#   .y = betaHat,
+#   .f = get_cis,
+#   smooth_for_ci = TRUE,
+#   L = 49
+#   # .options = furrr_options(seed = TRUE)
+# )
+#
+# plan(sequential)
+
+
+plot = FALSE
+if(plot){
+  get_plot_df = function(sim_res) {
+    num_var = nrow(sim_res$betaHat)
+    map_dfr(
+      .x = 1:num_var,
+      .f = function(r) {
+        data.frame(
+          s = 1:length(sim_res$betaHat[r, ]),
+          beta = sim_res$betaHat[r, ],
+          lower = sim_res$betaHat[r, ] - 2 * sqrt(diag(sim_res$betaHat.var[, , r])),
+          upper = sim_res$betaHat[r, ] + 2 * sqrt(diag(sim_res$betaHat.var[, , r])),
+          lower.joint = sim_res$betaHat[r, ] - sim_res$qn[r] *
+            sqrt(diag(sim_res$betaHat.var[, , r])),
+          upper.joint = sim_res$betaHat[r, ] + sim_res$qn[r] * sqrt(diag(sim_res$betaHat.var[, , r]))
+        ) %>%
+          mutate(name = sim_res$betaHat %>% rownames() %>% .[r])
+      }
+    )
+  }
+  plt_df_boot = map(cis, .f = get_plot_df)
+
+
+  plt_df_boot %>%
+    bind_rows(.id = "model") %>%
+    ggplot(aes(x = s, y = beta, group = model)) +
+    geom_line(aes(color = model))  +
+    facet_wrap(.~name, scales = "free_y") +
+    geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = model), alpha = .3) +
+    geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = model), alpha = .1) +
+    labs(x = "L", y = "Estimate") +
+    theme_classic() +
+    geom_hline(aes(yintercept = 0))
+
+}
