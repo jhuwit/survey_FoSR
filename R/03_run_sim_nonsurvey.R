@@ -200,3 +200,4 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   write_rds(result,
             here::here("results", "simulations", "non_survey", fname))
 }
+plan(sequential)

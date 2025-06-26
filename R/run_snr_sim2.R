@@ -28,7 +28,8 @@ settings = expand_grid(slope = "random",
                        I_n =c(100, 250, 500))
 
 ifold = get_fold()
-
+ifold = 10
+## issue is some strata only have 1 PSU - need to fix!
 # ifold = 10
 temp = settings[ifold, ]
 I = 10e6
@@ -72,7 +73,7 @@ for (s in 1:num_strata) {
   # s = 1
   set.seed(seed + s)
   num_in_strata = sum(stratum_assignments == s)
-  num_psu = round(runif(1, 50, 100), 0)
+  num_psu = round(runif(1, 100, 200), 0)
   set.seed(seed + s)
   dps = gtools::rdirichlet(1, rep(1, num_psu))
   set.seed(seed + s)
@@ -207,7 +208,11 @@ for (iter in 1:nsim) {
       p_i_given_strata[inds_in_psu] <- p_psu * inclusion_probs
     }
   }
-  p_i <- p_strata_design[stratum_assignments] * p_i_given_strata
+  if(num_strata != sampled_strata){
+    p_i <- p_strata_design[stratum_assignments] * p_i_given_strata
+  } else{
+    p_i = p_i_given_strata
+  }
   survey_weights <- 1 / p_i
 
   dat.sim <- data.frame(
@@ -226,7 +231,7 @@ for (iter in 1:nsim) {
   data =  cbind(dat.sim, Y_sample)
   rm(dat.sim, Y_sample)
   parallel = TRUE
-  ncores = parallelly::availableCores() - 1
+  ncores = parallelly::availableCores() - 2
   boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'none')
   fit_types = c('design', 'design', 'weighted', 'none')
   options(survey.lonely.psu = "adjust")
@@ -257,6 +262,13 @@ for (iter in 1:nsim) {
       .options = furrr_options(seed = TRUE)
     )
 
+
+    # run_boots(data = data, boot_type = "Rao-Wu-Yue-Beaumont", betaHat = betaHat[[1]],
+    #           num_boots = 10, set_seed = TRUE, samp_stages = c("PPSWR", "Poisson"))
+    #
+    #
+    # run_boots(data = data, boot_type = "BRR", betaHat = betaHat[[1]],
+    #           num_boots = 10, set_seed = TRUE, samp_stages = c("PPSWR", "Poisson"))
     cis = future_map2(
       .x = res,
       .y = betaHat,

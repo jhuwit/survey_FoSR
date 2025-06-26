@@ -249,6 +249,7 @@ cis = future_map2(
   .x = res,
   .y = betaHat,
   .f = get_cis,
+  L = 49,
   smooth_for_ci = TRUE,
   .options = furrr_options(seed = TRUE)
 )
