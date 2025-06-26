@@ -229,7 +229,8 @@ data = data %>%
 
 library(future)
 library(furrr)
-plan(multisession, workers = ncores)
+cores = parallelly::availableCores() - 1
+plan(multisession, workers = cores)
 
 res = future_map2(
   .x = boot_types,
