@@ -18,6 +18,7 @@ library(lme4)
 library(mgcv)
 library(ggplot2)
 library(gridExtra)
+library(svrep)
 
 
 # get beta hat
@@ -81,7 +82,9 @@ get_betahat = function(betaTilde, L = 50,
   betaHat <- t(apply(betaTilde, 1, function(x) mgcv::gam(x ~ s(argvals, bs = "tp",
                                                                k = (nknots + 1)),
                                                          method = "GCV.Cp")$fitted.values))
-
+  # bh <- t(apply(bt, 1, function(x) mgcv::gam(x ~ s(argvals, bs = "tp",
+  #                                                              k = (nknots + 1)),
+  #                                                        method = "GCV.Cp")$fitted.values))
   rownames(betaHat) <- rownames(betaTilde)
   colnames(betaHat) <- 1:L
   return(betaHat)
@@ -169,7 +172,7 @@ run_boots_old = function(data, boot_type, betaHat, family = "gaussian",
         cbind,
         lapply(1:num_boots, function(num) {
           set.seed(l * num)
-          index <- sample(row_number(data), dim(data)[1], replace = TRUE, prob = data$weight / sum(data$weight))
+          index <- sample(seq_len(nrow(data)), dim(data)[1], replace = TRUE, prob = data$weight / sum(data$weight))
           dat.tmp <- data[index, ]
 
           model <- glm(
@@ -185,7 +188,7 @@ run_boots_old = function(data, boot_type, betaHat, family = "gaussian",
         cbind,
         lapply(1:num_boots, function(num) {
           set.seed(l * num)
-          index <- sample(row_number(data), dim(data)[1], replace = TRUE)
+          index <- sample(seq_len(nrow(data)), dim(data)[1], replace = TRUE)
           dat.tmp <- data[index, ]
 
           model <- glm(
@@ -291,7 +294,7 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
          cbind,
          lapply(1:num_boots, function(num) {
            set.seed(l * num)
-           index <- sample(row_number(data), dim(data)[1], replace = TRUE, prob = data$weight / sum(data$weight))
+           index <- sample(seq_len(nrow(data)), dim(data)[1], replace = TRUE, prob = data$weight / sum(data$weight))
            dat.tmp <- data[index, ]
 
            model <- glm(
@@ -307,7 +310,7 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
          cbind,
          lapply(1:num_boots, function(num) {
            set.seed(l * num)
-           index <- sample(row_number(data), dim(data)[1], replace = TRUE)
+           index <- sample(seq_len(nrow(data)), dim(data)[1], replace = TRUE)
            dat.tmp <- data[index, ]
 
            model <- glm(
