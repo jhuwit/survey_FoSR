@@ -257,6 +257,7 @@ cis = future_map2(
 plan(sequential)
 
 write_rds(cis, here::here("results", "application.rds"))
+cis = read_rds(here::here("results", "application.rds"))
 # res = map2(
 #   .x = boot_types,
 #   .y = betaHat,
@@ -307,6 +308,8 @@ if(plot){
 
   plt_df_boot %>%
     bind_rows(.id = "model") %>%
+    filter(model %in% c("1", "2", "4")) %>%
+    mutate(model = factor(model, labels = c("BRR", "Wtd", "Unwtd"))) %>%
     ggplot(aes(x = s, y = beta, group = model)) +
     geom_line(aes(color = model))  +
     facet_wrap(.~name, scales = "free_y") +

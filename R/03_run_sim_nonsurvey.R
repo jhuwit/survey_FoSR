@@ -42,11 +42,12 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   samp_size = tmp_settings$n
   nsims = 500
   len = tmp_settings$L
-  if(samp_size > 1000 || len > 1000){
-    run_bayes = FALSE
-  } else{
-    run_bayes = TRUE
-  }
+  # if(samp_size > 1000 || len > 1000){
+  #   run_bayes = FALSE
+  # } else{
+  #   run_bayes = TRUE
+  # }
+  run_bayes = FALSE
   if(family == "gaussian"){ # if gaussian, we don't need to bootstrap so don't need inner parallelization
     ncores_outer = ncores_total
   } else{
