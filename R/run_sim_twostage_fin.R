@@ -143,7 +143,7 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) ||
       )
 
       beta_true = lst$beta_true
-      betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = family)
+      betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = temp$family)
 
       betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
 
@@ -154,7 +154,7 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) ||
           .y = betaHat,
           .f = run_boots,
           data = data,
-          family = family,
+          family = temp$family,
           num_boots = B,
           set_seed = TRUE,
           seed = 2025,
@@ -178,7 +178,7 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) ||
           .y = betaHat,
           .f = run_boots,
           data = data,
-          family = family,
+          family = temp$family,
           num_boots = B,
           set_seed = TRUE,
           samp_stages = c("PPSWR", "Poisson"),
