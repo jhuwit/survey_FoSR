@@ -384,9 +384,9 @@ get_cis_boot = function(betaTilde_boot,
   }
   for (r in 1:nrow(betaHat)) {
     if (smooth_for_variance) {
-      betaHat.var[, , r] <- 1.2 * var(t(betaHat_boot[r, , ]))
+      betaHat.var[, , r] <- var(t(betaHat_boot[r, , ]))
     } else{
-      betaHat.var[, , r] <- 1.2 * var(t(betaTilde_boot[r, , ]))
+      betaHat.var[, , r] <- var(t(betaTilde_boot[r, , ]))
     }
   }
 

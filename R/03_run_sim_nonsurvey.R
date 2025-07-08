@@ -24,6 +24,26 @@ force = TRUE
 
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
+
+
+keep_folds =
+  sim_settings %>%
+  filter(num_boots == 500) %>%
+  group_by(family, scenario, L, n) %>%
+  slice(1) %>%
+  ungroup() %>%
+  pull(fold)
+
+sim_settings =
+  sim_settings %>%
+  filter(num_boots == 500) %>%
+  filter(family == "gaussian" | fold %in% keep_folds)
+
+sim_settings %>%
+  filter(family != "gaussian") %>%
+  pull(fold) %>%
+  paste(collapse = ",")
+
 ifold = get_fold()
 # ifold = 111
 fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
