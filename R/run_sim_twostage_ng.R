@@ -51,12 +51,12 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) ||
 
 
   temp = settings[ifold,] # set settings for this simulation
-  family = temp$family
+  fam= temp$family
   strata_sigma = 0.05
   psu_sigma = sqrt(strata_sigma ^ 2 * temp$psu_re)
 
   lst = generate_superpopulation(scenario = 1,
-                                 family = "gaussian",
+                                 family = fam,
                                  I = 10e6,
                                  psu_sigma = psu_sigma,
                                  snr_b = temp$snr_b,
