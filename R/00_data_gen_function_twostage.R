@@ -141,19 +141,20 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     p_true = plogis(as.vector(fixef_signal) + as.vector(t(ranef)))
     Y_obs <- matrix(
       rbinom(
-        n = nrow(p_true) * L,
+        n = I * L,
         size = 1,
         prob = as.vector(t(p_true))
       ),
-      nrow = nrow(p_true),
+      nrow = I,
       ncol = L,
       byrow = TRUE
     )
   } else if (family == "poisson"){
     lam_true = exp(as.vector(fixef_signal) + as.vector(t(ranef)))
     Y_obs <- matrix(
-      rpois(n = nrow(lam_true) * L, lambda = as.vector(t(lam_true))),
-      nrow = nrow(lam_true),
+      rpois(n = I * L,
+            lambda = as.vector(t(lam_true))),
+      nrow = I,
       ncol = L,
       byrow = TRUE
     )

@@ -119,6 +119,7 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) ||
   lst = generate_superpopulation(scenario = temp$scen,
                                  family = temp$family,
                                  I = 10e6,
+                                 L = temp$len,
                                  psu_sigma = psu_sigma,
                                  snr_b = temp$snr_b,
                                  snr_eps = temp$snr_eps)
@@ -132,6 +133,7 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) ||
       data <- sample_from_population(
         X_des = lst$X_des,
         Y_obs = lst$Y_obs,
+        L = temp$len,
         ## dimension of the functional domain
         I_n = temp$In,
         num_strata = 30,
