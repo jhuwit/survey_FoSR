@@ -319,4 +319,118 @@ if(plot){
     theme_classic() +
     geom_hline(aes(yintercept = 0))
 
+  plt_df_boot %>%
+    bind_rows(.id = "model") %>%
+    filter(model %in% c("1", "2", "4")) %>%
+    mutate(across(c(beta, lower, upper, lower.joint, upper.joint), ~exp(.x))) %>%
+    mutate(model = factor(model, labels = c("BRR", "Wtd", "Unwtd"))) %>%
+    ggplot(aes(x = s, y = beta, group = model)) +
+    geom_line(aes(color = model))  +
+    facet_wrap(.~name, scales = "free_y") +
+    geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = model), alpha = .3) +
+    geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = model), alpha = .1) +
+    labs(x = "L", y = "Estimate") +
+    theme_classic() +
+    geom_hline(aes(yintercept = 1))
+
+  library(paletteer)
+  p1 = plt_df_boot %>%
+    bind_rows(.id = "model") %>%
+    filter(model %in% c("1", "4")) %>%
+    filter(grepl("age", name)) %>%
+    mutate(name = factor(name, labels = c("31-40", "41-50", "51-60", "61-70", ">70"))) %>%
+    mutate(across(c(beta, lower, upper, lower.joint, upper.joint), ~exp(.x))) %>%
+    mutate(model = factor(model, labels = c("BRR", "Unweighted"))) %>%
+    ggplot(aes(x = s, y = beta, group = model)) +
+    geom_line(aes(color = model))  +
+    facet_grid(.~name, scales = "free_y") +
+    geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = model), alpha = .3) +
+    geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = model), alpha = .1) +
+    labs(x = "L", y = "Estimate") +
+    theme_classic() +
+    geom_hline(aes(yintercept = 1)) +
+    scale_y_continuous(breaks=seq(0, 3, 0.5)) +
+    scale_x_continuous(breaks= seq(0, 49, 8), labels = c("00", "04", "08", "12", "16", "20", "24")) +
+    labs(x = "Hour of Day", y = "Steps rate ratio") +
+    scale_color_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    scale_fill_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    theme(legend.position = "bottom")
+
+  png(here::here("manuscript", "figures", "steps_application3.png"),
+      width = 12, height = 8, res = 300, units = "in")
+  p1
+  dev.off()
+
+  p1 = plt_df_boot %>%
+    bind_rows(.id = "model") %>%
+    filter(model %in% c("1", "4")) %>%
+    filter(grepl("race", name)) %>%
+    mutate(name = factor(name, labels = c("Hispanic", "Non-Hispanic Black", "Other"))) %>%
+    mutate(across(c(beta, lower, upper, lower.joint, upper.joint), ~exp(.x))) %>%
+    mutate(model = factor(model, labels = c("BRR", "Unweighted"))) %>%
+    ggplot(aes(x = s, y = beta, group = model)) +
+    geom_line(aes(color = model))  +
+    facet_grid(.~name, scales = "free_y") +
+    geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = model), alpha = .3) +
+    geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = model), alpha = .1) +
+    labs(x = "L", y = "Estimate") +
+    theme_classic() +
+    geom_hline(aes(yintercept = 1)) +
+    scale_y_continuous(breaks=seq(0, 3, 0.5)) +
+    scale_x_continuous(breaks= seq(0, 49, 8), labels = c("00", "04", "08", "12", "16", "20", "24")) +
+    labs(x = "Hour of Day", y = "Steps rate ratio") +
+    scale_color_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    scale_fill_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    theme(legend.position = "bottom")
+  png(here::here("manuscript", "figures", "steps_application2.png"),
+      width = 12, height = 8, res = 300, units = "in")
+  p1
+  dev.off()
+  p1 = plt_df_boot %>%
+    bind_rows(.id = "model") %>%
+    filter(model %in% c("1", "4")) %>%
+    filter(grepl("sex", name)) %>%
+    mutate(name = factor(name, labels = c("Female sex"))) %>%
+    mutate(across(c(beta, lower, upper, lower.joint, upper.joint), ~exp(.x))) %>%
+    mutate(model = factor(model, labels = c("BRR", "Unweighted"))) %>%
+    ggplot(aes(x = s, y = beta, group = model)) +
+    geom_line(aes(color = model))  +
+    facet_wrap(.~name, scales = "free_y") +
+    geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = model), alpha = .3) +
+    geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = model), alpha = .1) +
+    labs(x = "L", y = "Estimate") +
+    theme_classic() +
+    geom_hline(aes(yintercept = 1)) +
+    scale_y_continuous(breaks=seq(0, 3, 0.25)) +
+    scale_x_continuous(breaks= seq(0, 49, 8), labels = c("00", "04", "08", "12", "16", "20", "24")) +
+    labs(x = "Hour of Day", y = "Steps rate ratio") +
+    scale_color_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    scale_fill_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    theme(legend.position = "bottom")
+
+  p2 = plt_df_boot %>%
+    bind_rows(.id = "model") %>%
+    filter(model %in% c("1", "4")) %>%
+    filter(grepl("cept", name)) %>%
+    mutate(name = factor(name, labels = c("Intercept"))) %>%
+    mutate(across(c(beta, lower, upper, lower.joint, upper.joint), ~exp(.x))) %>%
+    mutate(model = factor(model, labels = c("BRR", "Unweighted"))) %>%
+    ggplot(aes(x = s, y = beta, group = model)) +
+    geom_line(aes(color = model))  +
+    facet_wrap(.~name, scales = "free_y") +
+    geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = model), alpha = .3) +
+    geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = model), alpha = .1) +
+    labs(x = "L", y = "Estimate") +
+    theme_classic() +
+    scale_y_continuous(breaks=seq(0, 20, 1)) +
+    scale_x_continuous(breaks= seq(0, 49, 8), labels = c("00", "04", "08", "12", "16", "20", "24")) +
+    labs(x = "Hour of Day", y = "Steps") +
+    scale_color_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    scale_fill_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
+    theme(legend.position = "bottom")
+  library(patchwork)
+  png(here::here("manuscript", "figures", "steps_application1.png"),
+      width = 12, height = 8, res = 300, units = "in")
+  (p2 | p1) + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+dev.off()
 }

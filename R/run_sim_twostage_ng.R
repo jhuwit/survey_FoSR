@@ -36,19 +36,22 @@ boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted', 'weighted
 
 options(survey.lonely.psu = "adjust")
 
-
-settings = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
+settings1 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
                        snr_eps = c(0.1, 0.5, 1, 2.5, 5),
                        psu_re = c(.5, .25),
                        In = c(100, 250, 500))
+settings2 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
+                       psu_re = 0.5,
+                       family = c("binomial", "poisson"),
+                       In = c(100, 250, 500))
 
-# just use PSU RE = 0.5
-family = "gaussian"
+settings = bind_rows(settings1, settings2)
+
 if(!file.exists(here::here("results", "simulations", "two_stage_sim", fname)) || force) {
 
 
   temp = settings[ifold,] # set settings for this simulation
-
+  family = temp$family
   strata_sigma = 0.05
   psu_sigma = sqrt(strata_sigma ^ 2 * temp$psu_re)
 
