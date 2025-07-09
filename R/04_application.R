@@ -35,7 +35,7 @@ boot_types = c('BRR', 'weighted', 'unweighted', 'unweighted')
 data =
   steps_df_small %>%
   mutate(sex_bin = if_else(gender == "Female", 1, 0)) %>%
-  mutate(age_cat = cut(age_in_years_at_screening, breaks=c(18, 30, 40, 50, 60, 70, 80), include.lowest = TRUE)) %>%
+  mutate(age_cat = cut(age_in_years_at_screening, breaks=c(18, 30, 40, 50, 60, 70, 80), include.lowest = TRUE, right = FALSE)) %>%
   rename(weight = full_sample_2_year_mec_exam_weight,
          psu = masked_variance_pseudo_psu,
          strata = masked_variance_pseudo_stratum) %>%
@@ -338,7 +338,7 @@ if(plot){
     bind_rows(.id = "model") %>%
     filter(model %in% c("1", "4")) %>%
     filter(grepl("age", name)) %>%
-    mutate(name = factor(name, labels = c("31-40", "41-50", "51-60", "61-70", ">70"))) %>%
+    mutate(name = factor(name, labels = paste0("Age ", c("31-40", "41-50", "51-60", "61-70", ">70")))) %>%
     mutate(across(c(beta, lower, upper, lower.joint, upper.joint), ~exp(.x))) %>%
     mutate(model = factor(model, labels = c("BRR", "Unweighted"))) %>%
     ggplot(aes(x = s, y = beta, group = model)) +
@@ -361,7 +361,7 @@ if(plot){
   p1
   dev.off()
 
-  p1 = plt_df_boot %>%
+  p2 = plt_df_boot %>%
     bind_rows(.id = "model") %>%
     filter(model %in% c("1", "4")) %>%
     filter(grepl("race", name)) %>%
@@ -384,9 +384,9 @@ if(plot){
     theme(legend.position = "bottom")
   png(here::here("manuscript", "figures", "steps_application2.png"),
       width = 12, height = 8, res = 300, units = "in")
-  p1
+  p2
   dev.off()
-  p1 = plt_df_boot %>%
+  p3 = plt_df_boot %>%
     bind_rows(.id = "model") %>%
     filter(model %in% c("1", "4")) %>%
     filter(grepl("sex", name)) %>%
@@ -408,7 +408,7 @@ if(plot){
     scale_fill_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
     theme(legend.position = "bottom")
 
-  p2 = plt_df_boot %>%
+  p4 = plt_df_boot %>%
     bind_rows(.id = "model") %>%
     filter(model %in% c("1", "4")) %>%
     filter(grepl("cept", name)) %>%
@@ -422,7 +422,7 @@ if(plot){
     geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = model), alpha = .1) +
     labs(x = "L", y = "Estimate") +
     theme_classic() +
-    scale_y_continuous(breaks=seq(0, 20, 1)) +
+    scale_y_continuous(breaks=seq(0, 20, 2)) +
     scale_x_continuous(breaks= seq(0, 49, 8), labels = c("00", "04", "08", "12", "16", "20", "24")) +
     labs(x = "Hour of Day", y = "Steps") +
     scale_color_paletteer_d("ggthemes::colorblind", direction = -1, name = "Model") +
@@ -431,6 +431,12 @@ if(plot){
   library(patchwork)
   png(here::here("manuscript", "figures", "steps_application1.png"),
       width = 12, height = 8, res = 300, units = "in")
-  (p2 | p1) + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+  (p3 | p4) + plot_layout(guides = "collect") & theme(legend.position = "bottom")
 dev.off()
+png(here::here("manuscript", "figures", "steps_application_all.png"),
+    width = 12, height = 8, res = 300, units = "in")
+(p4 | p3) / p1 / p2  + plot_layout(guides = "collect") + plot_annotation(tag_levels = "A") & theme(legend.position = "bottom")
+dev.off()
+
+
 }
