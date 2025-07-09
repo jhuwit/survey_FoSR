@@ -22,15 +22,7 @@ source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "00_data_gen_function_twostage.R"))
 source(here::here("R", "utils.R"))
 
-ifold = get_fold()
-fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
-nsim = 250
-B = 500
-parallel = TRUE
-force = TRUE
-
-ncores = parallelly::availableCores() - 1
 fit_types = c('weighted', 'weighted', 'weighted', 'weighted', 'unweighted', 'unweighted')
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted', 'weighted', 'unweighted')
 
@@ -117,7 +109,7 @@ for(ifold in 1:nrow(settings)){
 
   lst = generate_superpopulation(scenario = temp$scen,
                                  family = temp$family,
-                                 I = 10e4,
+                                 I = 10e6,
                                  L = temp$len,
                                  psu_sigma = psu_sigma,
                                  snr_b = temp$snr_b,
