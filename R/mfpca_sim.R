@@ -97,6 +97,10 @@ settings = bind_rows(settings1, settings2,
                      settings3, settings4,
                      settings5, settings6,
                      settings7, settings8)
+settings =
+  settings %>%
+  mutate(fold = row_number()) %>%
+  filter(psu_re == 0.5) # only run for psu_re = 0.5 for now
 
 res_list = list()
 for(ifold in 1:nrow(settings)){
@@ -109,7 +113,7 @@ for(ifold in 1:nrow(settings)){
 
   lst = generate_superpopulation(scenario = temp$scen,
                                  family = temp$family,
-                                 I = 10e6,
+                                 I = 10e4,
                                  L = temp$len,
                                  psu_sigma = psu_sigma,
                                  snr_b = temp$snr_b,
@@ -181,3 +185,21 @@ for(ifold in 1:nrow(settings)){
 
 write_rds(res_list, here::here("results", "mfpca_simulation.rds"))
 
+sim = read_rds(here::here("results", "mfpca_simulation.rds")) %>%
+  keep(is_tibble) %>%
+  bind_rows()
+
+sim = sim %>%
+  left_join(settings %>% mutate(fold = row_number()), by = "fold")
+
+sim %>%
+  filter(len == 50, family == "gaussian", psu_re == 0.5) %>%
+  ggplot(aes(x = factor(snr_b), y = pve_b, color = factor(snr_eps))) +
+  geom_point() +
+  facet_grid(In~scen)
+
+sim %>%
+  filter(len == 50, family != "gaussian", psu_re == 0.5) %>%
+  ggplot(aes(x = factor(snr_b), y = pve_b, color = factor(family))) +
+  geom_point() +
+  facet_grid(In~scen)

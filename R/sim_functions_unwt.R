@@ -17,6 +17,7 @@ library(progress)
 library(mgcv)
 library(ggplot2)
 library(gridExtra)
+library(parallel)
 
 
 generate_population = function(n = 500, # size of superpopulation

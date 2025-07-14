@@ -257,6 +257,7 @@ cis = future_map2(
 plan(sequential)
 
 write_rds(cis, here::here("results", "application.rds"))
+# getremote survey_FoSR/results/application.rds results/
 cis = read_rds(here::here("results", "application.rds"))
 # res = map2(
 #   .x = boot_types,
@@ -338,7 +339,7 @@ if(plot){
     bind_rows(.id = "model") %>%
     filter(model %in% c("1", "4")) %>%
     filter(grepl("age", name)) %>%
-    mutate(name = factor(name, labels = paste0("Age ", c("31-40", "41-50", "51-60", "61-70", ">70")))) %>%
+    mutate(name = factor(name, labels = paste0("Age ", c("30-39", "40-49", "50-59", "60-69", "70+")))) %>%
     mutate(across(c(beta, lower, upper, lower.joint, upper.joint), ~exp(.x))) %>%
     mutate(model = factor(model, labels = c("BRR", "Unweighted"))) %>%
     ggplot(aes(x = s, y = beta, group = model)) +

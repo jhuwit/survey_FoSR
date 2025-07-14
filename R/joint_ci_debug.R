@@ -33,7 +33,7 @@ source(here::here("R", "utils.R"))
 library(patchwork)
 
 
-nsim = 2
+nsim = 250
 B = 500
 force = TRUE
 
