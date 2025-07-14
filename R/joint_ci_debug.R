@@ -168,11 +168,11 @@ for(iter in 1:nsim){
       geom_line() +
       # Add labeled lines for custom legend
       geom_line(data = btrue_df,
-                aes(x = l, y = value, color = "Truth"), size = 1) +
+                aes(x = l, y = value, color = "Truth"), linewidth = 1) +
       geom_line(data = bhat_df,
-                aes(x = l, y = value, color = "Smoothed Estimate"), size = 1) +
+                aes(x = l, y = value, color = "Smoothed Estimate"), linewidth = 1) +
       geom_line(data = btilde_df,
-                aes(x = l, y = value, color = "Raw Estimate"), size = 1) +
+                aes(x = l, y = value, color = "Raw Estimate"), linewidth = 1) +
       # Manual legend
       scale_color_manual(values = c("Truth" = "red",
                                     "Smoothed Estimate" = "black",
@@ -205,11 +205,11 @@ for(iter in 1:nsim){
       geom_line() +
       # Add labeled lines for custom legend
       geom_line(data = btrue_df,
-                aes(x = l, y = value, color = "Truth"), size = 1) +
+                aes(x = l, y = value, color = "Truth"), linewidth = 1) +
       geom_line(data = bhat_df,
-                aes(x = l, y = value, color = "Smoothed Estimate"), size = 1) +
+                aes(x = l, y = value, color = "Smoothed Estimate"), linewidth = 1) +
       geom_line(data = btilde_df,
-                aes(x = l, y = value, color = "Raw Estimate"), size = 1) +
+                aes(x = l, y = value, color = "Raw Estimate"), linewidth = 1) +
       # Manual legend
       scale_color_manual(values = c("Truth" = "red",
                                     "Smoothed Estimate" = "black",
@@ -290,11 +290,11 @@ for(iter in 1:nsim){
       geom_ribbon(aes(x = l, ymin = min, ymax = max), fill = "lightgrey") +
       theme_light() +
       geom_line(data = btrue_df,
-                aes(x = l, y = value, color = "Truth"), size = 1) +
+                aes(x = l, y = value, color = "Truth"), linewidth = 1) +
       geom_line(data = bhat_df,
-                aes(x = l, y = value, color = "Smoothed Estimate"), size = 1) +
+                aes(x = l, y = value, color = "Smoothed Estimate"), linewidth = 1) +
       # geom_line(data = btilde_df %>% filter(name == "X"),
-      #           aes(x = l, y = value, color = "Raw Estimate"), size = 1) +
+      #           aes(x = l, y = value, color = "Raw Estimate"), linewidth = 1) +
       scale_color_manual(values = c("Truth" = "red",
                                     "Smoothed Estimate" = "black",
                                     "Raw Estimate" = "blue"))
@@ -321,11 +321,11 @@ for(iter in 1:nsim){
       geom_ribbon(aes(x = l, ymin = min, ymax = max), fill = "lightgrey") +
       theme_light() +
       geom_line(data = btrue_df,
-                aes(x = l, y = value, color = "Truth"), size = 1) +
+                aes(x = l, y = value, color = "Truth"), linewidth = 1) +
       geom_line(data = bhat_df,
-                aes(x = l, y = value, color = "Smoothed Estimate"), size = 1) +
+                aes(x = l, y = value, color = "Smoothed Estimate"), linewidth = 1) +
       # geom_line(data = btilde_df %>% filter(name == "X"),
-      #           aes(x = l, y = value, color = "Raw Estimate"), size = 1) +
+      #           aes(x = l, y = value, color = "Raw Estimate"), linewidth = 1) +
       scale_color_manual(values = c("Truth" = "red",
                                     "Smoothed Estimate" = "black",
                                     "Raw Estimate" = "blue"))  +
