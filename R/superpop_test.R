@@ -82,7 +82,7 @@ rm(lst)
 lst = generate_superpopulation(
   scenario = temp$scen,
   family = temp$family,
-  I = 5 * 10e6,
+  I = 2 * 10e6,
   L = temp$len,
   psu_sigma = psu_sigma,
   snr_b = temp$snr_b,
@@ -98,7 +98,7 @@ rm(lst)
 lst = generate_superpopulation(
   scenario = temp$scen,
   family = temp$family,
-  I = 5 * 10e7,
+  I = 10e7,
   L = temp$len,
   psu_sigma = psu_sigma,
   snr_b = temp$snr_b,
