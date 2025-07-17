@@ -23,85 +23,31 @@ source(here::here("R", "00_data_gen_function_twostage.R"))
 source(here::here("R", "utils.R"))
 
 
-fit_types = c('weighted', 'weighted', 'weighted', 'weighted', 'unweighted', 'unweighted')
-boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted', 'weighted', 'unweighted')
+fit_types = c('weighted', 'weighted', 'weighted', 'weighted', 'unweighted')
+boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted', 'unweighted')
 
 options(survey.lonely.psu = "adjust")
 
 
-settings1 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        snr_eps = c(0.1, 0.5, 1, 2.5, 5),
-                        psu_re = c(.5, .25),
-                        In = c(100, 250, 500)) %>%
-  mutate(len = 50,
-         family = "gaussian",
-         scen = 1)
-
-settings2 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        # snr_eps = c(0.1, 0.5, 1, 2.5, 5),
+settings1 = expand_grid(snr_b = c(0.25, 0.5, 1, 2.5, 5),
+                        snr_eps = c(0.25, 0.5, 1, 2.5, 5),
                         psu_re = 0.5,
-                        family = c("poisson", "binomial"),
-                        In = c(100, 250, 500)) %>%
-  mutate(len = 50,
-         scen = 1)
+                        In = c(100, 250, 500),
+                        len = c(50, 100),
+                        scen = c(1, 2),
+                        family = "gaussian")
 
-settings3 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        snr_eps = c(0.1, 0.5, 1, 2.5, 5),
-                        psu_re = c(.5),
-                        In = c(100, 250, 500)) %>%
-  mutate(len = 100,
-         family = "gaussian",
-         scen = 1)
-
-settings4 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        # snr_eps = c(0.1, 0.5, 1, 2.5, 5),
+settings2 = expand_grid(snr_b = c(0.25, 0.5, 1, 2.5, 5),
                         psu_re = 0.5,
-                        family = c("poisson", "binomial"),
-                        In = c(100, 250, 500))  %>%
-  mutate(len = 100,
-         scen = 1)
+                        In = c(100, 250, 500),
+                        len = c(50, 100),
+                        scen = c(1, 2),
+                        family = c("poisson", "binomial"))
 
-settings5 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        snr_eps = c(0.1, 0.5, 1, 2.5, 5),
-                        psu_re = c(.5),
-                        In = c(100, 250, 500)) %>%
-  mutate(len = 50,
-         family = "gaussian",
-         scen = 2)
 
-settings6 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        # snr_eps = c(0.1, 0.5, 1, 2.5, 5),
-                        psu_re = 0.5,
-                        family = c("poisson", "binomial"),
-                        In = c(100, 250, 500)) %>%
-  mutate(len = 50,
-         scen = 2)
 
-settings7 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        snr_eps = c(0.1, 0.5, 1, 2.5, 5),
-                        psu_re = c(.5),
-                        In = c(100, 250, 500)) %>%
-  mutate(len = 100,
-         family = "gaussian",
-         scen = 2)
-
-settings8 = expand_grid(snr_b = c(0.1, 0.5, 1, 2.5, 5, 10),
-                        # snr_eps = c(0.1, 0.5, 1, 2.5, 5),
-                        psu_re = 0.5,
-                        family = c("poisson", "binomial"),
-                        In = c(100, 250, 500))  %>%
-  mutate(len = 100,
-         scen = 2)
-
-settings = bind_rows(settings1, settings2,
-                     settings3, settings4,
-                     settings5, settings6,
-                     settings7, settings8)
-settings =
-  settings %>%
-  mutate(fold = row_number()) %>%
-  filter(psu_re == 0.5) # only run for psu_re = 0.5 for now
-
+settings = bind_rows(settings1, settings2) %>%
+  mutate(fold = row_number())
 res_list = list()
 for(ifold in 1:nrow(settings)){
   print(ifold)
@@ -113,7 +59,7 @@ for(ifold in 1:nrow(settings)){
 
   lst = generate_superpopulation(scenario = temp$scen,
                                  family = temp$family,
-                                 I = 10e4,
+                                 I = 10e6,
                                  L = temp$len,
                                  psu_sigma = psu_sigma,
                                  snr_b = temp$snr_b,
@@ -125,7 +71,7 @@ for(ifold in 1:nrow(settings)){
   # for (iter in 1:nsim) {
   #   set.seed(iter)
   #   x = try({
-  data <- sample_from_population(
+  data <- sample_from_population_wor(
     X_des = lst$X_des,
     Y_obs = lst$Y_obs,
     L = temp$len,
@@ -185,21 +131,21 @@ for(ifold in 1:nrow(settings)){
 
 write_rds(res_list, here::here("results", "mfpca_simulation.rds"))
 
-sim = read_rds(here::here("results", "mfpca_simulation.rds")) %>%
-  keep(is_tibble) %>%
-  bind_rows()
-
-sim = sim %>%
-  left_join(settings %>% mutate(fold = row_number()), by = "fold")
-
-sim %>%
-  filter(len == 50, family == "gaussian", psu_re == 0.5) %>%
-  ggplot(aes(x = factor(snr_b), y = pve_b, color = factor(snr_eps))) +
-  geom_point() +
-  facet_grid(In~scen)
-
-sim %>%
-  filter(len == 50, family != "gaussian", psu_re == 0.5) %>%
-  ggplot(aes(x = factor(snr_b), y = pve_b, color = factor(family))) +
-  geom_point() +
-  facet_grid(In~scen)
+# sim = read_rds(here::here("results", "mfpca_simulation.rds")) %>%
+#   keep(is_tibble) %>%
+#   bind_rows()
+#
+# sim = sim %>%
+#   left_join(settings %>% mutate(fold = row_number()), by = "fold")
+#
+# sim %>%
+#   filter(len == 50, family == "gaussian", psu_re == 0.5) %>%
+#   ggplot(aes(x = factor(snr_b), y = pve_b, color = factor(snr_eps))) +
+#   geom_point() +
+#   facet_grid(In~scen)
+#
+# sim %>%
+#   filter(len == 50, family != "gaussian", psu_re == 0.5) %>%
+#   ggplot(aes(x = factor(snr_b), y = pve_b, color = factor(family))) +
+#   geom_point() +
+#   facet_grid(In~scen)
