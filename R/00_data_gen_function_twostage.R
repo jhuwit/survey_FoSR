@@ -385,19 +385,19 @@ generate_superpopulation_nocorr = function(I = 10e6, # size of superpopulation
   rownames(beta_fixed) <- c("Intercept", "x")
 
   ## assign individuals to PSU and strata
+  ## assign individuals to PSU and strata
   set.seed(seed)
-  dirichlet_probs <- gtools::rdirichlet(1, rep(1, num_strata))
+  dirichlet_probs <- gtools::rdirichlet(1, rep(4, num_strata))
   set.seed(seed)
   stratum_assignments <- sample(1:num_strata, I, replace = TRUE, prob = dirichlet_probs)
   psu_assignments <- rep(NA, I)
 
   for (s in 1:num_strata) {
-    # s = 1
     set.seed(seed + s)
     num_in_strata = sum(stratum_assignments == s)
-    num_psu = round(runif(1, 200, 500), 0)
+    num_psu = round(runif(1, 75, 125), 0)
     set.seed(seed + s)
-    dps = gtools::rdirichlet(1, rep(1, num_psu))
+    dps = gtools::rdirichlet(1, rep(10, num_psu))
     set.seed(seed + s)
     psu_in_stratum = sample(1:num_psu,
                             num_in_strata,

@@ -33,7 +33,7 @@ source(here::here("R", "utils.R"))
 library(patchwork)
 
 
-nsim = 250
+nsim = 200
 B = 500
 force = TRUE
 
@@ -81,7 +81,7 @@ pdf(here::here("joint_ci_nocorr.pdf"))
 for(iter in 1:nsim){
   x = try({
     set.seed(iter)
-    data <- sample_from_population(
+    data <- sample_from_population_wor(
       X_des = lst$X_des,
       Y_obs = lst$Y_obs,
       L = temp$len,
@@ -115,7 +115,7 @@ for(iter in 1:nsim){
       set_seed = TRUE,
       seed = 2025,
       L = temp$len,
-      samp_stages = c("PPSWR", "Poisson"),
+      samp_stages = c("PPSWOR", "Poisson"),
       .options = furrr_options(seed = TRUE),
       .progress = TRUE
     )

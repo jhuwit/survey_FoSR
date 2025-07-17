@@ -81,7 +81,7 @@ pdf(here::here("joint_ci.pdf"))
 for(iter in 1:nsim){
   x = try({
     set.seed(iter)
-    data <- sample_from_population(
+    data <- sample_from_population_wor(
       X_des = lst$X_des,
       Y_obs = lst$Y_obs,
       L = temp$len,
