@@ -33,7 +33,7 @@ source(here::here("R", "utils.R"))
 library(patchwork)
 
 
-nsim = 250
+nsim = 200
 B = 500
 force = TRUE
 
@@ -115,7 +115,7 @@ for(iter in 1:nsim){
       set_seed = TRUE,
       seed = 2025,
       L = temp$len,
-      samp_stages = c("PPSWR", "Poisson"),
+      samp_stages = c("PPSWOR", "Poisson"),
       .options = furrr_options(seed = TRUE),
       .progress = TRUE
     )
