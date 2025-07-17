@@ -464,7 +464,7 @@ generate_superpopulation_nocorr = function(I = 10e6, # size of superpopulation
 }
 
 ## start here
-sample_from_population_random <- function(X_des, # design matrix
+sample_from_population_random_wor <- function(X_des, # design matrix
                                    Y_obs, # y matrix
                                    I_n = 100, # subjects in each psu-strata combination
                                    num_strata = 30,  # total strata
@@ -480,11 +480,13 @@ sample_from_population_random <- function(X_des, # design matrix
   selected_strata = 1:num_strata
   p_strata_design <- dirichlet_probs
 
+
   final_sample <- c()
   p1 <- rep(NA, I)
   p2 <- rep(NA, I)
   p_overall <- rep(NA, I)
   psus <- c()
+
 
   # within each strata, select PSU with replacement using PPS
   for (strata in 1:num_strata) {
@@ -497,33 +499,37 @@ sample_from_population_random <- function(X_des, # design matrix
     # Sample PSUs WITH replacement using PPS
     selected_psus <- sample(psu_ids,
                             size = num_selected_psu,
-                            replace = TRUE)
+                            replace = FALSE)
 
-    psu_probs <- rep(1/length(psu_ids), length(psu_ids)) # PPS
+    psu_probs <- rep(1/length(psu_ids), length(psu_ids)) # not PPS
 
-    psu_prob_selected <- 1 - (1 - psu_probs) ^ num_selected_psu
-    names(psu_prob_selected) <- psu_ids
+    psu_prob_selected = map_dbl(.x = match(selected_psus, psu_ids),
+                                .f = get_p_i,
+                                psu_probs)
 
-    # within each selected PSU select individuals based on X1
+    names(psu_prob_selected) <- selected_psus
+
     for (psu in selected_psus) {
       inds_in_psu <- which(psu_assignments == psu &
                              stratum_assignments == strata)
+
       if(I_n > length(inds_in_psu)){
         sampled_units = inds_in_psu
-        p2[inds_in_psu] <- 1
+        inclusion_probs <- 1
       } else{
         sampled_units = sample(inds_in_psu,
                                size = I_n,
                                replace = FALSE)
-        p2[inds_in_psu] <- 1/I_n
+
+        inclusion_probs <- I_n / length(inds_in_psu)
       }
-      inclusion_probs = p2[inds_in_psu]
+
       final_sample <- c(final_sample, sampled_units)
       psus <- c(psus, rep(psu, length(sampled_units)))
-
-      p_psu <- psu_prob_selected[psu]
+      p_psu <- psu_prob_selected[which(names(psu_prob_selected) == psu)]
 
       p1[inds_in_psu] <- p_psu
+      p2[inds_in_psu] <- inclusion_probs
       p_overall[inds_in_psu] <- p_psu * inclusion_probs
     }
   }
