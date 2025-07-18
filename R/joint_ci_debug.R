@@ -71,13 +71,13 @@ lst = generate_superpopulation(
 L = 50
 nknots_min = NULL
 nknots_min_cov = 35
-mult_fac = 1.2
+mult_fac = 1.3
 nknots <- min(round(L / 2), nknots_min)
 nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
 nknots_fpca <- min(round(L / 2), 35)
 argvals = 1:L
 
-pdf(here::here("joint_ci.pdf"))
+pdf(here::here("joint_ci_13.pdf"))
 for(iter in 1:nsim){
   x = try({
     set.seed(iter)
