@@ -326,7 +326,7 @@ sample_from_population_wor <- function(X_des, # design matrix
       inclusion_probs <- inclusion_probs / sum(inclusion_probs)
       inclusion_probs <- inclusion_probs * I_n
       inclusion_probs[inclusion_probs > 1] <- 1
-      set.seed(strata + seed + which(selected_psu == psu)) # ensure reproducibility
+      set.seed(strata + seed + which(selected_psus == psu)) # ensure reproducibility
       sampled_units <- inds_in_psu[rbinom(length(inds_in_psu), 1, inclusion_probs) == 1]
 
       final_sample <- c(final_sample, sampled_units)
