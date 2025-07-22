@@ -273,7 +273,8 @@ sample_from_population_wor <- function(X_des, # design matrix
                                    num_selected_psu = 2,
                                    dirichlet_probs, # stratum probabilities
                                    psu_assignments, # assignment to psu (w/in strata)
-                                   L = 50 # length of fnl domain
+                                   L = 50, # length of fnl domain
+                                   seed = 1
 ){
   I = nrow(X_des)
   X1 = X_des[, 2]
@@ -298,6 +299,7 @@ sample_from_population_wor <- function(X_des, # design matrix
     psu_ids <- names(psu_sizes)
 
     # Sample PSUs WITH replacement using PPS
+    set.seed(strata + seed)
     selected_psus <- sample(psu_ids,
                             size = num_selected_psu,
                             replace = FALSE,
@@ -324,7 +326,7 @@ sample_from_population_wor <- function(X_des, # design matrix
       inclusion_probs <- inclusion_probs / sum(inclusion_probs)
       inclusion_probs <- inclusion_probs * I_n
       inclusion_probs[inclusion_probs > 1] <- 1
-
+      set.seed(strata + seed + as.numeric(psu)) # ensure reproducibility
       sampled_units <- inds_in_psu[rbinom(length(inds_in_psu), 1, inclusion_probs) == 1]
 
       final_sample <- c(final_sample, sampled_units)
