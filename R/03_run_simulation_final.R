@@ -27,7 +27,7 @@ fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
 nsim = 200
 B = 500
-force = TRUE
+force = FALSE
 
 ncores = parallelly::availableCores() - 1
 fit_types = c('weighted', 'unweighted')
