@@ -27,55 +27,64 @@ fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
 
 nsim = 200
 B = 500
-parallel = TRUE
 force = TRUE
 
 ncores = parallelly::availableCores() - 1
 fit_types = c('weighted', 'weighted', 'weighted', 'weighted', 'unweighted')
-boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted', 'unweighted')
+boot_types = c('Rao-Wu-Yue-Beaumont',
+               'BRR',
+               'weighted',
+               'unweighted',
+               'unweighted')
 
 options(survey.lonely.psu = "adjust")
 
 
-settings1 = expand_grid(snr_b = c(0.25, 0.5, 1, 2.5, 5),
-                        snr_eps = c(0.25, 0.5, 1, 2.5, 5),
-                        psu_re = 0.5,
-                        In = c(100, 250, 500),
-                        len = c(50, 100),
-                        scen = c(1, 2),
-                        family = "gaussian")
+settings1 = expand_grid(
+  snr_b = c(0.25, 0.5, 1, 2.5, 5),
+  snr_eps = c(0.25, 0.5, 1, 2.5, 5),
+  psu_re = 0.5,
+  In = c(100, 250, 500),
+  len = c(50, 100),
+  scen = c(1, 2),
+  family = "gaussian"
+)
 
-settings2 = expand_grid(snr_b = c(0.25, 0.5, 1, 2.5, 5),
-                        psu_re = 0.5,
-                        In = c(100, 250, 500),
-                        len = c(50, 100),
-                        scen = c(1, 2),
-                        family = c("poisson", "binomial"))
+settings2 = expand_grid(
+  snr_b = c(0.25, 0.5, 1, 2.5, 5),
+  psu_re = 0.5,
+  In = c(100, 250, 500),
+  len = c(50, 100),
+  scen = c(1, 2),
+  family = c("poisson", "binomial")
+)
 
 
 
 settings = bind_rows(settings1, settings2) %>%
   mutate(fold = row_number())
 
-if(!dir.exists(here::here("results", "simulations", "two_stage_sim2"))){
-  dir.create(here::here("results", "simulations", "two_stage_sim2"), recursive = TRUE)
+if (!dir.exists(here::here("results", "simulations", "two_stage_sim2"))) {
+  dir.create(here::here("results", "simulations", "two_stage_sim2"),
+             recursive = TRUE)
 }
 
-if(!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) || force) {
-
-
-  temp = settings[ifold,] # set settings for this simulation
+if (!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) ||
+    force) {
+  temp = settings[ifold, ] # set settings for this simulation
 
   strata_sigma = 0.05
   psu_sigma = sqrt(strata_sigma ^ 2 * temp$psu_re)
 
-  lst = generate_superpopulation(scenario = temp$scen,
-                                 family = temp$family,
-                                 I = 10e6,
-                                 L = temp$len,
-                                 psu_sigma = psu_sigma,
-                                 snr_b = temp$snr_b,
-                                 snr_eps = temp$snr_eps)
+  lst = generate_superpopulation(
+    scenario = temp$scen,
+    family = temp$family,
+    I = 10e6,
+    L = temp$len,
+    psu_sigma = psu_sigma,
+    snr_b = temp$snr_b,
+    snr_eps = temp$snr_eps
+  )
 
 
 
@@ -91,59 +100,44 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) |
         num_strata = 30,
         stratum_assignments = lst$stratum_assignments,
         psu_assignments = lst$psu_assignments,
-        dirichlet_probs = lst$dirichlet_probs
+        dirichlet_probs = lst$dirichlet_probs,
+        seed = iter
       )
 
       beta_true = lst$beta_true
-      betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = temp$family)
+      betaTilde = map(
+        .x = fit_types,
+        .f = get_betatilde,
+        data = data,
+        family = temp$family
+      )
 
       betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
 
-      if (parallel) {
-        plan(multisession, workers = ncores)
-        res = future_map2(
-          .x = boot_types,
-          .y = betaHat,
-          .f = run_boots,
-          data = data,
-          family = temp$family,
-          num_boots = B,
-          set_seed = TRUE,
-          seed = 2025,
-          L = temp$len,
-          samp_stages = c("PPSWOR", "Poisson"),
-          .options = furrr_options(seed = TRUE)
-        )
 
-        cis = future_map2(
-          .x = res,
-          .y = betaHat,
-          .f = get_cis,
-          L = temp$len,
-          smooth_for_ci = TRUE,
-          .options = furrr_options(seed = TRUE)
-        )
-        plan(sequential)
-      } else{
-        res = map2(
-          .x = boot_types,
-          .y = betaHat,
-          .f = run_boots,
-          data = data,
-          family = temp$family,
-          num_boots = B,
-          set_seed = TRUE,
-          samp_stages = c("PPSWOR", "Poisson"),
-          seed = 2025,
-          L = temp$len)
+      plan(multisession, workers = ncores)
+      res = future_map2(
+        .x = boot_types,
+        .y = betaHat,
+        .f = run_boots_fast,
+        data = data,
+        family = temp$family,
+        num_boots = B,
+        seed = 2025,
+        L = temp$len,
+        samp_stages = c("PPSWOR", "Poisson"),
+        .options = furrr_options(seed = TRUE)
+      )
 
-        cis = map2(
-          .x = res,
-          .y = betaHat,
-          .f = get_cis,
-          L = temp$len,
-          smooth_for_ci = TRUE)
-      }
+      cis = future_map2(
+        .x = res,
+        .y = betaHat,
+        .f = get_cis,
+        L = temp$len,
+        smooth_for_ci = TRUE,
+        .options = furrr_options(seed = TRUE)
+      )
+      plan(sequential)
 
       stats = map2(
         .x = cis,
@@ -167,6 +161,6 @@ if(!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) |
     list_rbind(names_to = "id")
 
 
-  write_rds(result, here::here("results", "simulations", "two_stage_sim2", fname))
+  write_rds(result,
+            here::here("results", "simulations", "two_stage_sim2", fname))
 }
-

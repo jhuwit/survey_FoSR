@@ -227,6 +227,26 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
      indices = replicate(num_boots, sample_data(data), simplify = FALSE)
    }
 
+   if(boot_type == "weighted"){
+     boot_indices <- replicate(
+       num_boots,
+       sample(seq_len(nrow(data)),
+              size = nrow(data),
+              replace = TRUE,
+              prob = data$weight / sum(data$weight)),
+       simplify = FALSE
+     )
+   }
+
+   if(boot_type == "unweighted"){
+     boot_indices <- replicate(
+       num_boots,
+       sample(seq_len(nrow(data)),
+              size = nrow(data),
+              replace = TRUE),
+       simplify = FALSE
+     )
+   }
    # initiliaze progress bar
    pb <- progress_bar$new(format = "  bootstrapping across L [:bar] :percent eta: :eta",,
                           total = L)
@@ -292,38 +312,192 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
      } else if (boot_type == "weighted"){
        coefs <- do.call(
          cbind,
-         lapply(1:num_boots, function(num) {
-           set.seed(l * num)
-           index <- sample(seq_len(nrow(data)), dim(data)[1], replace = TRUE, prob = data$weight / sum(data$weight))
-           dat.tmp <- data[index, ]
+         lapply(seq_len(num_boots), function(b) {
+           dat.tmp <- data[boot_indices[[b]], ]
 
            model <- glm(
              formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
              data = dat.tmp,
              weights = weight,
-             family = family)
+             family = family
+           )
            model$coefficients
-         }))
+         })
+       )
        betaTilde_boot[,l,] <- coefs
      } else if (boot_type == "unweighted"){
        coefs <- do.call(
          cbind,
-         lapply(1:num_boots, function(num) {
-           set.seed(l * num)
-           index <- sample(seq_len(nrow(data)), dim(data)[1], replace = TRUE)
-           dat.tmp <- data[index, ]
+         lapply(seq_len(num_boots), function(b) {
+           dat.tmp <- data[boot_indices[[b]], ]
 
            model <- glm(
              formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
              data = dat.tmp,
-             family = family)
+             family = family
+           )
            model$coefficients
-         }))
+         })
+       )
        betaTilde_boot[,l,] <- coefs
      }
    }
    return(betaTilde_boot)
- }
+}
+
+run_boots_fast = function(data, boot_type, betaHat, family = "gaussian",
+                          num_boots = 500, seed = 2025, L = 50,
+                          samp_stages = NULL,
+                          model_formula = as.formula(paste0('Y~', 'X'))) {
+  if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "weighted", "unweighted"))){
+    stop("please specify boot_type as one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'weighted', 'unweighted'")
+  }
+  argvals = 1:L
+  data = data %>%
+    mutate(row_id = row_number())
+  out_index <- grep(paste0("^", model_formula[2]), names(data))
+  Y_mat <- as.matrix(data[, out_index])
+  X_base <- model.matrix(stats::as.formula(paste0("~", model_formula[3])), data = data)
+
+  if (is.character(family)) {
+    family <- get(family, mode = "function", envir = parent.frame())()
+  }
+
+  # array with dimensions num_coefficients x length functional domain x num_boots
+  betaTilde_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), num_boots))
+ # get replicates to avoid sample repeatedly
+  if (boot_type == "BRR") {
+    sample_data = function(df) {
+      df %>%
+        group_by(strata) %>%
+        summarise(psu = sample(psu, size = 1))
+    }
+    set.seed(seed)
+    indices = replicate(num_boots, sample_data(data), simplify = FALSE)
+  } else if (boot_type == "weighted") {
+    set.seed(seed)
+    boot_indices <- replicate(
+      num_boots,
+      sample(
+        seq_len(nrow(data)),
+        size = nrow(data),
+        replace = TRUE,
+        prob = data$weight / sum(data$weight)
+      ),
+      simplify = FALSE
+    )
+  } else if (boot_type == "unweighted") {
+    set.seed(seed)
+    boot_indices <- replicate(num_boots,
+                              sample(
+                                seq_len(nrow(data)),
+                                size = nrow(data),
+                                replace = TRUE
+                              ),
+                              simplify = FALSE)
+  }
+
+  if (boot_type == "BRR") {
+    for (l in 1:L) {
+      data$Yl <- Y_mat[, l]
+      coefs <- do.call(cbind, lapply(1:num_boots, function(r) {
+        dat_tmp <- data %>%
+          inner_join(indices[[r]], by = c("psu", "strata")) %>%
+          mutate(weight = weight * 2) # double weights via BRR method
+        # Subset model matrix correctly
+        X_tmp <- X_base[dat_tmp$row_id, , drop = FALSE]
+        dat_tmp$Yl <- Y_mat[dat_tmp$row_id, l]
+        # Fit model quickly
+        fit <- glm.fit(
+          x = X_tmp,
+          y = dat_tmp$Yl,
+          weights = dat_tmp$weight,
+          family = family
+        )
+        fit$coefficients
+      }))
+      betaTilde_boot[, l, ] <- coefs
+    }
+  } else if (boot_type == "weighted") {
+      for (l in 1:L) {
+        data$Yl <- Y_mat[, l]
+        coefs <- do.call(cbind, lapply(1:num_boots, function(b) {
+          dat_tmp <- data[boot_indices[[b]], ]
+          X_tmp <- X_base[dat_tmp$row_id, , drop = FALSE]
+          dat_tmp$Yl <- Y_mat[dat_tmp$row_id, l]
+          # Fit model quickly
+          fit <- glm.fit(
+            x = X_tmp,
+            y = dat_tmp$Yl,
+            weights = dat_tmp$weight,
+            family = family
+          )
+          fit$coefficients
+        }))
+        betaTilde_boot[, l, ] <- coefs
+      }
+   } else if (boot_type == "unweighted") {
+      for (l in 1:L) {
+        data$Yl <- Y_mat[, l]
+        coefs <- do.call(cbind, lapply(1:num_boots, function(b) {
+          dat_tmp <- data[boot_indices[[b]], ]
+          X_tmp <- X_base[dat_tmp$row_id, , drop = FALSE]
+          dat_tmp$Yl <- Y_mat[dat_tmp$row_id, l]
+          fit <- glm.fit(x = X_tmp,
+                         y = dat_tmp$Yl,
+                         family = family)
+          fit$coefficients
+        }))
+        betaTilde_boot[, l, ] <- coefs
+      }
+    } else if (boot_type == "Rao-Wu-Yue-Beaumont") {
+      svy_design <- svydesign(
+        ids = ~ psu + ID,
+        strata = ~ strata,
+        weights = ~ weight,
+        data = data,
+        nest = TRUE
+      )
+      set.seed(seed)
+      rwyb_wts = make_rwyb_bootstrap_weights(
+        num_replicates = num_boots,
+        samp_unit_ids = svy_design$cluster,
+        strata_ids = svy_design$strata,
+        samp_unit_sel_probs = matrix(
+          c(data$p_stage1, data$p_stage2),
+          byrow = FALSE,
+          ncol = 2
+        ),
+        samp_method_by_stage = samp_stages,
+        allow_final_stage_singletons = TRUE,
+        output = "weights"
+      )
+      bs_design <- svrepdesign(
+        weights = ~ weight,
+        repweights = rwyb_wts,
+        rscales = rep(1, num_boots),
+        scale = 1,
+        type = "other",
+        data = data,
+        combined.weights = TRUE
+      )
+      prototype_model <- svyglm(
+        formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
+        design = bs_design,
+        family = family,
+        return.replicates = TRUE,
+        control = glm.control(maxit = 5000)
+      )
+      for (l in 1:L) {
+        data$Yl <- Y_mat[, l]
+        bs_design$variables$Yl <- data$Yl
+        updated_model <- update(prototype_model)
+        betaTilde_boot[, l, ] <- t(as.matrix(updated_model$replicates[, 1:nrow(betaHat)]))
+      }
+    }
+    return(betaTilde_boot)
+  }
+
  # res = c("BRR", "Rao-Wu-Yue-Beaumont", "Preston", "no_design") %>%
  #   map(\(x) run_boot_sim(data, betaHat = betaHat, boot_type = x, num_boots = 50, set_seed = TRUE, seed = 2025, L = 50))
 
