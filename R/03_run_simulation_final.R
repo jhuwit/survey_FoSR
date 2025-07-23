@@ -30,12 +30,8 @@ B = 500
 force = TRUE
 
 ncores = parallelly::availableCores() - 1
-fit_types = c('weighted', 'weighted', 'weighted', 'weighted', 'unweighted')
-boot_types = c('Rao-Wu-Yue-Beaumont',
-               'BRR',
-               'weighted',
-               'unweighted',
-               'unweighted')
+fit_types = c('weighted', 'unweighted')
+boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted')
 
 options(survey.lonely.psu = "adjust")
 
@@ -87,6 +83,7 @@ if (!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) 
   )
 
 
+  plan(multisession, workers = ncores)
 
   sim_res <- list() ## store simulation results
   for (iter in 1:nsim) {
@@ -115,11 +112,10 @@ if (!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) 
       betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
 
 
-      plan(multisession, workers = ncores)
-      res = future_map2(
+      res = future_map(
         .x = boot_types,
-        .y = betaHat,
         .f = run_boots_fast,
+        betaHat = betaHat[[1]],
         data = data,
         family = temp$family,
         num_boots = B,
@@ -129,17 +125,18 @@ if (!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) 
         .options = furrr_options(seed = TRUE)
       )
 
+      fit_list = list(betaHat[[1]], betaHat[[1]], betaHat[[1]], betaHat[[2]])
+
       cis = future_map2(
         .x = res,
-        .y = betaHat,
+        .y = fit_list,
         .f = get_cis,
         L = temp$len,
         smooth_for_ci = TRUE,
         .options = furrr_options(seed = TRUE)
       )
-      plan(sequential)
 
-      stats = map2(
+      stats = future_map2(
         .x = cis,
         .y = boot_types,
         .f = get_coverage_stats,
@@ -149,12 +146,14 @@ if (!file.exists(here::here("results", "simulations", "two_stage_sim2", fname)) 
         list_rbind() %>%
         mutate(n = nrow(data), n_boot = B)
 
+
       sim_res[[iter]] <- stats
     })
     rm(x)
     print(iter)
   }
 
+  plan(sequential)
   result =
     sim_res %>%
     keep(., is.data.frame) %>%

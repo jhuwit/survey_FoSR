@@ -213,7 +213,7 @@ sample_from_population_wr <- function(X_des, # design matrix
                              stratum_assignments == strata)
 
       # Informative sampling based on X1 or PC scores
-      incl_score <- X1[inds_in_psu]  # Or your combination like: -0.6 * score1 + ...
+      incl_score <- X1[inds_in_psu]
       inclusion_probs <- plogis(incl_score)
       inclusion_probs <- inclusion_probs / sum(inclusion_probs)
       inclusion_probs <- inclusion_probs * I_n * 2
