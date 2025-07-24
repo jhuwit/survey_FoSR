@@ -23,9 +23,6 @@ source(here::here("R", "00_data_gen_function_twostage.R"))
 source(here::here("R", "utils.R"))
 
 
-fit_types = c('weighted', 'weighted', 'weighted', 'weighted', 'unweighted')
-boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted', 'unweighted')
-
 options(survey.lonely.psu = "adjust")
 
 
@@ -80,7 +77,8 @@ for(ifold in 1:nrow(settings)){
     num_strata = 30,
     stratum_assignments = lst$stratum_assignments,
     psu_assignments = lst$psu_assignments,
-    dirichlet_probs = lst$dirichlet_probs
+    dirichlet_probs = lst$dirichlet_probs,
+    seed = 1
   ) %>%
     mutate(strata_psu = paste0(strata, "_", psu))
 
