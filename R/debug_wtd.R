@@ -32,6 +32,151 @@ source(here::here("R", "00_data_gen_function_twostage.R"))
 source(here::here("R", "utils.R"))
 library(patchwork)
 
+generate_superpopulation = function(I = 10e6, # size of superpopulation
+                                    L = 50, # length of functional domain
+                                    scenario = 1, # shape of function
+                                    family = "gaussian",
+                                    seed = 4574,
+                                    num_strata = 30, # num total strata
+                                    strata_sigma = 0.05,
+                                    psu_sigma = 0.025,
+                                    sd_beta = 0.125, # strata scaling factor
+                                    snr_b = 1, # signal noise ratio for random to fixed effects
+                                    snr_eps = 1, # signal to noise for gaussian
+                                    strata_d = 1,
+                                    psu_d = 10
+){
+  stopifnot("scenario must be either 1 or 2" = scenario %in% c(1, 2))
+  stopifnot("family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"))
+
+
+  X_des <- cbind(1, rnorm(I, 0, 2))
+
+  ## simulate true beta
+  grid <- seq(0, 1, length = L)
+  beta_fixed <- matrix(NA, 2, L)
+  beta_fixed[1, ] <- -0.15 - 0.1 * sin(2 * pi * grid) - 0.1 * cos(2 * pi * grid)
+  beta_fixed[2, ] <- dnorm(grid, 0.6, 0.15) / 20
+  rownames(beta_fixed) <- c("Intercept", "x")
+
+  ## assign individuals to PSU and strata
+  set.seed(seed)
+  dirichlet_probs <- gtools::rdirichlet(1, rep(strata_d, num_strata))
+  set.seed(seed)
+  stratum_assignments <- sample(1:num_strata, I, replace = TRUE, prob = dirichlet_probs)
+  psu_assignments <- rep(NA, I)
+
+  for (s in 1:num_strata) {
+    set.seed(seed + s)
+    num_in_strata = sum(stratum_assignments == s)
+    num_psu = round(runif(1, 75, 125), 0)
+    set.seed(seed + s)
+    dps = gtools::rdirichlet(1, rep(psu_d, num_psu))
+    set.seed(seed + s)
+    psu_in_stratum = sample(1:num_psu,
+                            num_in_strata,
+                            replace = TRUE,
+                            prob = dps)
+    psu_assignments[stratum_assignments == s] <- paste0(s, "_", psu_in_stratum)
+  }
+
+  ## create psu and strata-specific random effects
+  nbasis <- 5
+  basis <- fda::create.bspline.basis(c(0, 1), nbasis)
+  Phi <- fda::eval.basis(grid, basis)
+
+  set.seed(seed)
+  strata_scores <- matrix(rnorm(num_strata * nbasis, 0, strata_sigma), num_strata, nbasis)
+  strata_random_effects <- strata_scores %*% t(Phi)
+
+  total_psu = length(unique(psu_assignments))
+
+  set.seed(seed)
+  psu_scores <- matrix(
+    rnorm(total_psu * nbasis, 0, psu_sigma),
+    total_psu,
+    nbasis
+  )
+  psu_random_effects <- psu_scores %*% t(Phi)
+
+
+  strata_effects_indiv <- strata_random_effects[stratum_assignments, ]
+  psu_effects_indiv <- psu_random_effects[as.numeric(factor(psu_assignments)), ]
+  random_effects <- strata_effects_indiv + psu_effects_indiv
+
+  rm(strata_effects_indiv, psu_effects_indiv)
+
+  ## add stratum-specific slope modifications
+  set.seed(seed)
+  stratum_scaling <- rnorm(num_strata, mean = 1, sd = sd_beta)
+
+  beta1_by_stratum <- matrix(rep(stratum_scaling, each = L), nrow = num_strata) *
+    matrix(rep(beta_fixed[2, ], times = num_strata),
+           nrow = num_strata,
+           byrow = TRUE)
+
+  # assign to individuals
+  beta1_by_indiv <- beta1_by_stratum[stratum_assignments, ]
+
+  # adjust random effect based on signal to noise parameters
+
+  fixef_signal <- matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
+    X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+
+  # include stratum-specific slope variation in the random effects
+  slope_re <- (stratum_scaling[stratum_assignments] - 1) *
+    matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+  ranef <- slope_re + random_effects
+  ranef <- sd(fixef_signal) / sd(ranef) / snr_b * ranef
+  rm(random_effects)
+
+
+  # generate outcomes
+  set.seed(seed)
+  if (family == "gaussian") {
+    sd_lp = sd(as.vector(t(fixef_signal)) + as.vector(t(ranef)))
+    sigma = sd_lp / snr_eps
+
+    Y_obs =  matrix(
+      rnorm(
+        n = I * L,
+        mean = as.vector(t(fixef_signal)) + as.vector(t(ranef)),
+        sd = sigma
+      ),
+      nrow = I,
+      ncol = L,
+      byrow = TRUE
+    )
+  } else if(family == "binomial") {
+    p_true = plogis(as.vector(fixef_signal) + as.vector(t(ranef)))
+    Y_obs <- matrix(
+      rbinom(
+        n = I * L,
+        size = 1,
+        prob = as.vector(t(p_true))
+      ),
+      nrow = I,
+      ncol = L,
+      byrow = TRUE
+    )
+  } else if (family == "poisson"){
+    lam_true = exp(as.vector(fixef_signal) + as.vector(t(ranef)))
+    Y_obs <- matrix(
+      rpois(n = I * L,
+            lambda = as.vector(t(lam_true))),
+      nrow = I,
+      ncol = L,
+      byrow = TRUE
+    )
+  }
+
+  return(list(Y_obs = Y_obs,
+              X_des = X_des,
+              stratum_assignments = stratum_assignments,
+              psu_assignments = psu_assignments,
+              dirichlet_probs = dirichlet_probs,
+              beta_true = beta_fixed))
+}
 theme_set(theme_light())
 nsim = 15
 B = 500
@@ -73,15 +218,9 @@ temp = tibble(
 strata_sigma = 0.05
 psu_sigma = sqrt(strata_sigma ^ 2 * temp$psu_re)
 
-lst = generate_superpopulation(
-  scenario = temp$scen,
-  family = temp$family,
-  I = 10e6,
-  L = temp$len,
-  psu_sigma = psu_sigma,
-  snr_b = temp$snr_b,
-  snr_eps = temp$snr_eps
-)
+
+
+
 
 L = 50
 nknots_min = NULL
@@ -92,179 +231,209 @@ nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
 nknots_fpca <- min(round(L / 2), 35)
 argvals = 1:L
 iter = 1
-pdf(here::here("wtd_debug.pdf"))
-for(iter in 1:nsim){
-  x = try({
-    set.seed(iter)
-    data <- sample_from_population_wor(
-      X_des = lst$X_des,
-      Y_obs = lst$Y_obs,
-      L = temp$len,
-      ## dimension of the functional domain
-      I_n = temp$In,
-      num_strata = 30,
-      stratum_assignments = lst$stratum_assignments,
-      psu_assignments = lst$psu_assignments,
-      dirichlet_probs = lst$dirichlet_probs,
-      seed = iter
-    )
 
-    data$weight = data$weight / mean(data$weight)
+settings = expand_grid(strata_d = c(1, 2, 4),
+                       psu_d = c(1, 5, 10))
+pdf(here::here("wtd_debug_test.pdf"))
 
-    beta_true = lst$beta_true
-    betaTilde = map(
-      .x = fit_types,
-      .f = get_betatilde,
-      data = data,
-      family = temp$family
-    )
+for(row in 1:nrow(settings)){
+  tmp = settings[row,]
+  s_d = tmp$strata_d
+  p_d = tmp$psu_d
+  lst = generate_superpopulation(
+    scenario = temp$scen,
+    family = temp$family,
+    I = 10e6,
+    L = temp$len,
+    psu_sigma = psu_sigma,
+    snr_b = temp$snr_b,
+    snr_eps = temp$snr_eps,
+    strata_d = s_d,
+    psu_d = p_d
+  )
+  for(iter in 1:nsim){
+    x = try({
+      set.seed(iter)
+      data <- sample_from_population_wor(
+        X_des = lst$X_des,
+        Y_obs = lst$Y_obs,
+        L = temp$len,
+        ## dimension of the functional domain
+        I_n = temp$In,
+        num_strata = 30,
+        stratum_assignments = lst$stratum_assignments,
+        psu_assignments = lst$psu_assignments,
+        dirichlet_probs = lst$dirichlet_probs,
+        seed = iter
+      )
 
-    betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
+      # data$weight = data$weight / mean(data$weight)
 
+      beta_true = lst$beta_true
+      betaTilde = map(
+        .x = fit_types,
+        .f = get_betatilde,
+        data = data,
+        family = temp$family
+      )
 
-    plan(multisession, workers = 8)
-    res = future_map(
-      .x = boot_types,
-      .f = run_boots_fast_internal,
-      betaHat = betaHat[[1]],
-      data = data,
-      family = temp$family,
-      num_boots = B,
-      seed = 2025,
-      L = temp$len,
-      samp_stages = c("PPSWOR", "Poisson"),
-      .options = furrr_options(seed = TRUE),
-      ncores = 2
-    )
-
-    fit_list = list(betaHat[[1]], betaHat[[1]], betaHat[[1]], betaHat[[2]])
-
-    cis = future_map2(
-      .x = res,
-      .y = fit_list,
-      .f = get_cis,
-      L = temp$len,
-      smooth_for_ci = TRUE,
-      .options = furrr_options(seed = TRUE)
-    )
-
-    plan(sequential)
+      betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
 
 
+      # plan(multisession, workers = 8)
+      # res = future_map(
+      #   .x = boot_types,
+      #   .f = run_boots_fast_internal,
+      #   betaHat = betaHat[[1]],
+      #   data = data,
+      #   family = temp$family,
+      #   num_boots = B,
+      #   seed = 2025,
+      #   L = temp$len,
+      #   samp_stages = c("PPSWOR", "Poisson"),
+      #   .options = furrr_options(seed = TRUE),
+      #   ncores = 2
+      # )
+      #
+      # fit_list = list(betaHat[[1]], betaHat[[1]], betaHat[[1]], betaHat[[2]])
+      #
+      # cis = future_map2(
+      #   .x = res,
+      #   .y = fit_list,
+      #   .f = get_cis,
+      #   L = temp$len,
+      #   smooth_for_ci = TRUE,
+      #   .options = furrr_options(seed = TRUE)
+      # )
+      #
+      # plan(sequential)
+      #
+      #
 
-    # res_x = res[[1]][2, , ]
+      # res_x = res[[1]][2, , ]
 
-    btrue_df =
-      beta_true %>%
-      as_tibble() %>%
-      mutate(beta = c("beta_0", "beta_1")) %>%
-      pivot_longer(cols = -beta) %>%
-      mutate(x = as.numeric(sub(".*V", "", name))) %>%
-      filter(beta == "beta_1") %>%
-      select(-beta) %>%
-      rename(l = x)
+      btrue_df =
+        beta_true %>%
+        as_tibble() %>%
+        mutate(beta = c("beta_0", "beta_1")) %>%
+        pivot_longer(cols = -beta) %>%
+        mutate(x = as.numeric(sub(".*V", "", name))) %>%
+        filter(beta == "beta_1") %>%
+        select(-beta) %>%
+        rename(l = x)
 
-    bhat_df_wt =
-      betaHat[[1]] %>%
-      as_tibble() %>%
-      mutate(beta = c("beta_0", "beta_1")) %>%
-      pivot_longer(cols = -beta) %>%
-      mutate(x = as.numeric(sub(".*V", "", name))) %>%
-      filter(beta == "beta_1") %>%
-      select(-beta) %>%
-      rename(l = x)
+      # btrue_df2 =
+      #   colMeans(beta1_by_indiv) %>%
+      #   as_tibble() %>%
+      #   mutate(l = row_number())
 
-    bhat_df_unwt =
-      betaHat[[2]] %>%
-      as_tibble() %>%
-      mutate(beta = c("beta_0", "beta_1")) %>%
-      pivot_longer(cols = -beta) %>%
-      mutate(x = as.numeric(sub(".*V", "", name))) %>%
-      filter(beta == "beta_1") %>%
-      select(-beta) %>%
-      rename(l = x)
+      bhat_df_wt =
+        betaHat[[1]] %>%
+        as_tibble() %>%
+        mutate(beta = c("beta_0", "beta_1")) %>%
+        pivot_longer(cols = -beta) %>%
+        mutate(x = as.numeric(sub(".*V", "", name))) %>%
+        filter(beta == "beta_1") %>%
+        select(-beta) %>%
+        rename(l = x)
 
-    btilde_df =
-      betaTilde[[1]] %>%
-      as_tibble() %>%
-      mutate(beta = c("beta_0", "beta_1")) %>%
-      pivot_longer(cols = -beta) %>%
-      mutate(x = as.numeric(sub(".*V", "", name))) %>%
-      filter(beta == "beta_1") %>%
-      select(-beta) %>%
-      rename(l = x)
+      bhat_df_unwt =
+        betaHat[[2]] %>%
+        as_tibble() %>%
+        mutate(beta = c("beta_0", "beta_1")) %>%
+        pivot_longer(cols = -beta) %>%
+        mutate(x = as.numeric(sub(".*V", "", name))) %>%
+        filter(beta == "beta_1") %>%
+        select(-beta) %>%
+        rename(l = x)
 
-    p1 = btrue_df %>%
-      ggplot(aes(x = l, y = value, color = "Truth")) +
-      geom_line() +
-      geom_line(data = bhat_df_unwt, aes(x = l, y = value, color = "Unweighted")) +
-      geom_line(data = bhat_df_wt, aes(x = l, y = value, color = "Weighted")) +
-      scale_color_manual(values = c("Truth" = "black",
-                                    "Unweighted" = "red",
-                                    "Weighted" = "blue")) +
-                           labs(y= "beta") +
-      scale_y_continuous(limits = c(-.1, .2))
+      btilde_df =
+        betaTilde[[1]] %>%
+        as_tibble() %>%
+        mutate(beta = c("beta_0", "beta_1")) %>%
+        pivot_longer(cols = -beta) %>%
+        mutate(x = as.numeric(sub(".*V", "", name))) %>%
+        filter(beta == "beta_1") %>%
+        select(-beta) %>%
+        rename(l = x)
 
-    plot_dfs = map2(.x = cis, .f = get_plot_df,
-                   .y = boot_types)
+      p1 = btrue_df %>%
+        ggplot(aes(x = l, y = value, color = "Truth")) +
+        geom_line() +
+        geom_line(data = bhat_df_unwt, aes(x = l, y = value, color = "Unweighted")) +
+        geom_line(data = bhat_df_wt, aes(x = l, y = value, color = "Weighted")) +
+        # geom_line(data = btrue_df2, aes(x = l, y = value, color = "True 2")) +
+        scale_color_manual(values = c("Truth" = "black",
+                                      "Unweighted" = "red",
+                                      "Weighted" = "blue")) +
+        # "True 2" = "green")) +
+        labs(y= "beta", title = paste0("Strata d = ", s_d, " psu d = ", p_d)) +
+        scale_y_continuous(limits = c(-.1, .2))
 
-    p2 = plot_dfs[[1]] %>%
-      filter(name == "X") %>%
-      ggplot() +
-      geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      labs(title = "BRR", x = "l") +
-      scale_color_manual(values = c("Truth" = "black",
-                                    "Estimate" = "blue")) +
-
-      scale_y_continuous(limits = c(-.1, .2))
-
-    p3 = plot_dfs[[2]] %>%
-      filter(name == "X") %>%
-      ggplot() +
-      geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      labs(title = "RWYB",
-           x = "l") +
-      scale_color_manual(values = c("Truth" = "black",
-                                    "Estimate" = "blue")) +
-
-      scale_y_continuous(limits = c(-.1, .2))
-
-    p4 = plot_dfs[[3]] %>%
-      filter(name == "X") %>%
-      ggplot() +
-      geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      labs(title = "Weighted",
-           x = "l") +
-      scale_color_manual(values = c("Truth" = "black",
-                                    "Estimate" = "blue")) +
-
-      scale_y_continuous(limits = c(-.1, .2))
-
-    p5 = plot_dfs[[4]] %>%
-      filter(name == "X") %>%
-      ggplot() +
-      geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      labs(title = "Unweighted",
-           x = "l") +
-      scale_color_manual(values = c("Truth" = "black",
-                                    "Estimate" = "red")) +
-      scale_y_continuous(limits = c(-.1, .2))
-
-
-    print((p1 | ((p2 + p3) / (p4 + p5)) + plot_layout(guides = "collect", axes = "collect")))
-  })
-  rm(x)
+      # plot_dfs = map2(.x = cis, .f = get_plot_df,
+      #                .y = boot_types)
+      #
+      # p2 = plot_dfs[[1]] %>%
+      #   filter(name == "X") %>%
+      #   ggplot() +
+      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
+      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
+      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
+      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
+      #   labs(title = "BRR", x = "l") +
+      #   scale_color_manual(values = c("Truth" = "black",
+      #                                 "Estimate" = "blue")) +
+      #
+      #   scale_y_continuous(limits = c(-.1, .2))
+      #
+      # p3 = plot_dfs[[2]] %>%
+      #   filter(name == "X") %>%
+      #   ggplot() +
+      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
+      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
+      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
+      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
+      #   labs(title = "RWYB",
+      #        x = "l") +
+      #   scale_color_manual(values = c("Truth" = "black",
+      #                                 "Estimate" = "blue")) +
+      #
+      #   scale_y_continuous(limits = c(-.1, .2))
+      #
+      # p4 = plot_dfs[[3]] %>%
+      #   filter(name == "X") %>%
+      #   ggplot() +
+      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
+      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
+      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
+      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
+      #   labs(title = "Weighted",
+      #        x = "l") +
+      #   scale_color_manual(values = c("Truth" = "black",
+      #                                 "Estimate" = "blue")) +
+      #
+      #   scale_y_continuous(limits = c(-.1, .2))
+      #
+      # p5 = plot_dfs[[4]] %>%
+      #   filter(name == "X") %>%
+      #   ggplot() +
+      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
+      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
+      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
+      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
+      #   labs(title = "Unweighted",
+      #        x = "l") +
+      #   scale_color_manual(values = c("Truth" = "black",
+      #                                 "Estimate" = "red")) +
+      #   scale_y_continuous(limits = c(-.1, .2))
+      #
+      #
+      # print((p1 | ((p2 + p3) / (p4 + p5)) + plot_layout(guides = "collect", axes = "collect")))
+      print(p1)
+    })
+    rm(x)
+  }
 }
+
+
 dev.off()
