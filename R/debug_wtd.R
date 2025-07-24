@@ -234,9 +234,37 @@ iter = 1
 
 settings = expand_grid(strata_d = c(1, 2,3, 4),
                        psu_d = c(1, 2, 3, 4, 5, 7, 10))
-pdf(here::here("wtd_debug_test.pdf"))
+# pdf(here::here("wtd_debug_test.pdf"))
+get_bias = function(iter){
+  set.seed(iter)
+  data <- sample_from_population_wor(
+    X_des = lst$X_des,
+    Y_obs = lst$Y_obs,
+    L = temp$len,
+    ## dimension of the functional domain
+    I_n = temp$In,
+    num_strata = 30,
+    stratum_assignments = lst$stratum_assignments,
+    psu_assignments = lst$psu_assignments,
+    dirichlet_probs = lst$dirichlet_probs,
+    seed = iter
+  )
+  betaTilde = map(
+    .x = fit_types,
+    .f = get_betatilde,
+    data = data,
+    family = temp$family
+  )
 
-for(row in 1:nrow(settings)){
+  betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
+  # get bias
+  bias = map_dbl(.x = betaHat,
+                 .f = \(x) sum(abs(x[2,] - beta_true[2,])^2))
+
+  bias
+}
+
+get_bias_all = function(row) {
   tmp = settings[row,]
   s_d = tmp$strata_d
   p_d = tmp$psu_d
@@ -251,189 +279,58 @@ for(row in 1:nrow(settings)){
     strata_d = s_d,
     psu_d = p_d
   )
-  for(iter in 1:nsim){
-    x = try({
-      set.seed(iter)
-      data <- sample_from_population_wor(
-        X_des = lst$X_des,
-        Y_obs = lst$Y_obs,
-        L = temp$len,
-        ## dimension of the functional domain
-        I_n = temp$In,
-        num_strata = 30,
-        stratum_assignments = lst$stratum_assignments,
-        psu_assignments = lst$psu_assignments,
-        dirichlet_probs = lst$dirichlet_probs,
-        seed = iter
-      )
-
-      # data$weight = data$weight / mean(data$weight)
-
-      beta_true = lst$beta_true
-      betaTilde = map(
-        .x = fit_types,
-        .f = get_betatilde,
-        data = data,
-        family = temp$family
-      )
-
-      betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
-
-
-      # plan(multisession, workers = 8)
-      # res = future_map(
-      #   .x = boot_types,
-      #   .f = run_boots_fast_internal,
-      #   betaHat = betaHat[[1]],
-      #   data = data,
-      #   family = temp$family,
-      #   num_boots = B,
-      #   seed = 2025,
-      #   L = temp$len,
-      #   samp_stages = c("PPSWOR", "Poisson"),
-      #   .options = furrr_options(seed = TRUE),
-      #   ncores = 2
-      # )
-      #
-      # fit_list = list(betaHat[[1]], betaHat[[1]], betaHat[[1]], betaHat[[2]])
-      #
-      # cis = future_map2(
-      #   .x = res,
-      #   .y = fit_list,
-      #   .f = get_cis,
-      #   L = temp$len,
-      #   smooth_for_ci = TRUE,
-      #   .options = furrr_options(seed = TRUE)
-      # )
-      #
-      # plan(sequential)
-      #
-      #
-
-      # res_x = res[[1]][2, , ]
-
-      btrue_df =
-        beta_true %>%
-        as_tibble() %>%
-        mutate(beta = c("beta_0", "beta_1")) %>%
-        pivot_longer(cols = -beta) %>%
-        mutate(x = as.numeric(sub(".*V", "", name))) %>%
-        filter(beta == "beta_1") %>%
-        select(-beta) %>%
-        rename(l = x)
-
-      # btrue_df2 =
-      #   colMeans(beta1_by_indiv) %>%
-      #   as_tibble() %>%
-      #   mutate(l = row_number())
-
-      bhat_df_wt =
-        betaHat[[1]] %>%
-        as_tibble() %>%
-        mutate(beta = c("beta_0", "beta_1")) %>%
-        pivot_longer(cols = -beta) %>%
-        mutate(x = as.numeric(sub(".*V", "", name))) %>%
-        filter(beta == "beta_1") %>%
-        select(-beta) %>%
-        rename(l = x)
-
-      bhat_df_unwt =
-        betaHat[[2]] %>%
-        as_tibble() %>%
-        mutate(beta = c("beta_0", "beta_1")) %>%
-        pivot_longer(cols = -beta) %>%
-        mutate(x = as.numeric(sub(".*V", "", name))) %>%
-        filter(beta == "beta_1") %>%
-        select(-beta) %>%
-        rename(l = x)
-
-      btilde_df =
-        betaTilde[[1]] %>%
-        as_tibble() %>%
-        mutate(beta = c("beta_0", "beta_1")) %>%
-        pivot_longer(cols = -beta) %>%
-        mutate(x = as.numeric(sub(".*V", "", name))) %>%
-        filter(beta == "beta_1") %>%
-        select(-beta) %>%
-        rename(l = x)
-
-      p1 = btrue_df %>%
-        ggplot(aes(x = l, y = value, color = "Truth")) +
-        geom_line() +
-        geom_line(data = bhat_df_unwt, aes(x = l, y = value, color = "Unweighted")) +
-        geom_line(data = bhat_df_wt, aes(x = l, y = value, color = "Weighted")) +
-        # geom_line(data = btrue_df2, aes(x = l, y = value, color = "True 2")) +
-        scale_color_manual(values = c("Truth" = "black",
-                                      "Unweighted" = "red",
-                                      "Weighted" = "blue")) +
-        # "True 2" = "green")) +
-        labs(y= "beta", title = paste0("Strata d = ", s_d, " psu d = ", p_d)) +
-        scale_y_continuous(limits = c(-.1, .2))
-
-      # plot_dfs = map2(.x = cis, .f = get_plot_df,
-      #                .y = boot_types)
-      #
-      # p2 = plot_dfs[[1]] %>%
-      #   filter(name == "X") %>%
-      #   ggplot() +
-      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      #   labs(title = "BRR", x = "l") +
-      #   scale_color_manual(values = c("Truth" = "black",
-      #                                 "Estimate" = "blue")) +
-      #
-      #   scale_y_continuous(limits = c(-.1, .2))
-      #
-      # p3 = plot_dfs[[2]] %>%
-      #   filter(name == "X") %>%
-      #   ggplot() +
-      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      #   labs(title = "RWYB",
-      #        x = "l") +
-      #   scale_color_manual(values = c("Truth" = "black",
-      #                                 "Estimate" = "blue")) +
-      #
-      #   scale_y_continuous(limits = c(-.1, .2))
-      #
-      # p4 = plot_dfs[[3]] %>%
-      #   filter(name == "X") %>%
-      #   ggplot() +
-      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      #   labs(title = "Weighted",
-      #        x = "l") +
-      #   scale_color_manual(values = c("Truth" = "black",
-      #                                 "Estimate" = "blue")) +
-      #
-      #   scale_y_continuous(limits = c(-.1, .2))
-      #
-      # p5 = plot_dfs[[4]] %>%
-      #   filter(name == "X") %>%
-      #   ggplot() +
-      #   geom_ribbon(aes(x  = s, ymin = lower.joint, ymax = upper.joint), fill = "darkgrey") +
-      #   geom_ribbon(aes(x  = s, ymin = lower, ymax = upper), fill = "lightgrey") +
-      #   geom_line(aes(x = s, y = beta, color = "Estimate")) +
-      #   geom_line(data = btrue_df, aes(x=l, y = value, color = "Truth")) +
-      #   labs(title = "Unweighted",
-      #        x = "l") +
-      #   scale_color_manual(values = c("Truth" = "black",
-      #                                 "Estimate" = "red")) +
-      #   scale_y_continuous(limits = c(-.1, .2))
-      #
-      #
-      # print((p1 | ((p2 + p3) / (p4 + p5)) + plot_layout(guides = "collect", axes = "collect")))
-      print(p1)
-    })
-    rm(x)
-  }
+  beta_true = lst$beta_true
+  res = map(.x = 1:nsim, .f = get_bias) %>%
+    map(., .f = \(x) t(x) %>% as_tibble()) %>%
+    bind_rows() %>%
+    magrittr::set_colnames(c("weighted", "unweighted")) %>%
+    mutate(iter = 1:nsim,
+           setting = row)
+  res
 }
 
+final_res = map_dfr(.x = 1:nrow(settings),
+                     .f = get_bias_all)
 
-dev.off()
+
+write_rds(final_res,
+          here::here("debug_wtd.rds"))
+
+
+get_bias = function(iter){
+  set.seed(iter)
+  data <- sample_from_population_wor(
+    X_des = lst$X_des,
+    Y_obs = lst$Y_obs,
+    L = temp$len,
+    ## dimension of the functional domain
+    I_n = temp$In,
+    num_strata = 30,
+    stratum_assignments = lst$stratum_assignments,
+    psu_assignments = lst$psu_assignments,
+    dirichlet_probs = lst$dirichlet_probs,
+    seed = iter
+  )
+  data$weight = pmin(data$weight, quantile(data$weight, .99))
+
+  betaTilde = map(
+    .x = fit_types,
+    .f = get_betatilde,
+    data = data,
+    family = temp$family
+  )
+
+  betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
+  # get bias
+  bias = map_dbl(.x = betaHat,
+                 .f = \(x) sum(abs(x[2,] - beta_true[2,])^2))
+
+  bias
+}
+
+final_res = map_dfr(.x = 1:nrow(settings),
+                    .f = get_bias_all)
+
+
+write_rds(final_res,
+          here::here("debug_wtd_trunc.rds"))
