@@ -29,7 +29,8 @@ nsim = 200
 B = 500
 force = FALSE
 
-ncores = parallelly::availableCores() - 1
+# ncores = parallelly::availableCores() - 1
+ncores = parallelly::availableCores()
 fit_types = c('weighted', 'unweighted')
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted')
 
