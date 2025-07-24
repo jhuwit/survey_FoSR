@@ -232,8 +232,8 @@ nknots_fpca <- min(round(L / 2), 35)
 argvals = 1:L
 iter = 1
 
-settings = expand_grid(strata_d = c(1, 2, 4),
-                       psu_d = c(1, 5, 10))
+settings = expand_grid(strata_d = c(1, 2,3, 4),
+                       psu_d = c(1, 2, 3, 4, 5, 7, 10))
 pdf(here::here("wtd_debug_test.pdf"))
 
 for(row in 1:nrow(settings)){
