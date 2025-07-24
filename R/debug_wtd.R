@@ -178,7 +178,7 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
               beta_true = beta_fixed))
 }
 theme_set(theme_light())
-nsim = 15
+nsim = 250
 B = 500
 force = TRUE
 
@@ -235,7 +235,7 @@ iter = 1
 settings = expand_grid(strata_d = c(1, 2,3, 4),
                        psu_d = c(1, 2, 3, 4, 5, 7, 10))
 # pdf(here::here("wtd_debug_test.pdf"))
-get_bias = function(iter){
+get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
   set.seed(iter)
   data <- sample_from_population_wor(
     X_des = lst$X_des,
@@ -271,7 +271,7 @@ get_bias_all = function(row) {
   lst = generate_superpopulation(
     scenario = temp$scen,
     family = temp$family,
-    I = 10e6,
+    I = 10e5,
     L = temp$len,
     psu_sigma = psu_sigma,
     snr_b = temp$snr_b,
@@ -280,7 +280,7 @@ get_bias_all = function(row) {
     psu_d = p_d
   )
   beta_true = lst$beta_true
-  res = map(.x = 1:nsim, .f = get_bias) %>%
+  res = map(.x = 1:nsim, .f = get_bias, lst = lst) %>%
     map(., .f = \(x) t(x) %>% as_tibble()) %>%
     bind_rows() %>%
     magrittr::set_colnames(c("weighted", "unweighted")) %>%
@@ -289,15 +289,17 @@ get_bias_all = function(row) {
   res
 }
 
-final_res = map_dfr(.x = 1:nrow(settings),
-                     .f = get_bias_all)
-
+final_res = map(.x = 1:nrow(settings),
+                    .f = get_bias_all)
+#
+# final_res = map(.x = 1:2,
+#                     .f = get_bias_all)
 
 write_rds(final_res,
           here::here("debug_wtd.rds"))
 
 
-get_bias = function(iter){
+get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
   set.seed(iter)
   data <- sample_from_population_wor(
     X_des = lst$X_des,
