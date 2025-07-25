@@ -188,7 +188,7 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
               b1_mean = beta1_mean_sm))
 }
 theme_set(theme_light())
-nsim = 5
+nsim = 250
 
 force = TRUE
 
@@ -283,7 +283,7 @@ get_bias_all = function(row) {
   lst = generate_superpopulation(
     scenario = temp$scen,
     family = temp$family,
-    I = 10e5,
+    I = 10e6,
     L = temp$len,
     psu_sigma = psu_sigma,
     snr_b = temp$snr_b,
