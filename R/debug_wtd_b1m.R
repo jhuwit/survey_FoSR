@@ -118,6 +118,15 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
   # assign to individuals
   beta1_by_indiv <- beta1_by_stratum[stratum_assignments, ]
 
+  beta1_mean = colMeans(beta1_by_indiv)
+  argvals = 1:L
+  kk = L / 2 + 1
+  beta1_mean_sm = gam(beta1_mean ~ s(argvals, bs = "tp", k = kk),
+                                     method = "GCV.Cp")$fitted.values
+
+
+
+
   # adjust random effect based on signal to noise parameters
 
   fixef_signal <- matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
@@ -175,11 +184,12 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
               stratum_assignments = stratum_assignments,
               psu_assignments = psu_assignments,
               dirichlet_probs = dirichlet_probs,
-              beta_true = beta_fixed))
+              beta_true = beta_fixed,
+              b1_mean = beta1_mean_sm))
 }
 theme_set(theme_light())
-nsim = 250
-B = 500
+nsim = 5
+
 force = TRUE
 
 get_plot_df = function(sim_res, tname){
@@ -249,8 +259,8 @@ get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
     dirichlet_probs = lst$dirichlet_probs,
     seed = iter
   )
-  data$weight = pmin(data$weight, quantile(data$weight, .99))
-
+  beta_true = lst$beta_true
+  b1m = lst$b1_mean
   betaTilde = map(
     .x = fit_types,
     .f = get_betatilde,
@@ -261,7 +271,7 @@ get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
   betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
   # get bias
   bias = map_dbl(.x = betaHat,
-                 .f = \(x) sum(abs(x[2,] - beta_true[2,])^2))
+                 .f = \(x) sum(abs(x[2,] - b1m)^2))
 
   bias
 }
@@ -273,7 +283,7 @@ get_bias_all = function(row) {
   lst = generate_superpopulation(
     scenario = temp$scen,
     family = temp$family,
-    I = 10e6,
+    I = 10e5,
     L = temp$len,
     psu_sigma = psu_sigma,
     snr_b = temp$snr_b,
@@ -291,41 +301,11 @@ get_bias_all = function(row) {
   res
 }
 
-
-get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
-  set.seed(iter)
-  data <- sample_from_population_wor(
-    X_des = lst$X_des,
-    Y_obs = lst$Y_obs,
-    L = temp$len,
-    ## dimension of the functional domain
-    I_n = temp$In,
-    num_strata = 30,
-    stratum_assignments = lst$stratum_assignments,
-    psu_assignments = lst$psu_assignments,
-    dirichlet_probs = lst$dirichlet_probs,
-    seed = iter
-  )
-  data$weight = pmin(data$weight, quantile(data$weight, .99))
-
-  betaTilde = map(
-    .x = fit_types,
-    .f = get_betatilde,
-    data = data,
-    family = temp$family
-  )
-
-  betaHat = map(.x = betaTilde, get_betahat, L = temp$len)
-  # get bias
-  bias = map_dbl(.x = betaHat,
-                 .f = \(x) sum(abs(x[2,] - beta_true[2,])^2))
-
-  bias
-}
-
-final_res = map_dfr(.x = 1:nrow(settings),
-                    .f = get_bias_all)
-
+final_res = map(.x = 1:nrow(settings),
+                .f = get_bias_all)
+#
 
 write_rds(final_res,
-          here::here("debug_wtd_trunc.rds"))
+          here::here("debug_wtd_b1m.rds"))
+
+
