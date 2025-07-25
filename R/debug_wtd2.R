@@ -306,6 +306,8 @@ get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
     dirichlet_probs = lst$dirichlet_probs,
     seed = iter
   )
+  beta_true = lst$beta_true
+
   data$weight = pmin(data$weight, quantile(data$weight, .99))
 
   betaTilde = map(
