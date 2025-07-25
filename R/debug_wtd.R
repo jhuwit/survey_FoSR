@@ -249,6 +249,7 @@ get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
     dirichlet_probs = lst$dirichlet_probs,
     seed = iter
   )
+  beta_true = lst$beta_true
   betaTilde = map(
     .x = fit_types,
     .f = get_betatilde,
@@ -271,7 +272,7 @@ get_bias_all = function(row) {
   lst = generate_superpopulation(
     scenario = temp$scen,
     family = temp$family,
-    I = 10e5,
+    I = 10e6,
     L = temp$len,
     psu_sigma = psu_sigma,
     snr_b = temp$snr_b,
