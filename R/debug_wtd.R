@@ -315,7 +315,7 @@ get_bias = function(iter, lst, fit_types = c("weighted", "unweighted")){
     seed = iter
   )
   data$weight = pmin(data$weight, quantile(data$weight, .99))
-
+  beta_true = lst$beta_true
   betaTilde = map(
     .x = fit_types,
     .f = get_betatilde,
