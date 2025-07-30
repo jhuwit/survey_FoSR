@@ -393,8 +393,8 @@ plot_results = function(scen, snr_b, snr_eps, sd_beta= 0.125,  inf_level = 0.5, 
                     subtitle = paste0("unwtd bias = ", round(bias0[2], 3), ", ", round(bias1[2], 3), " wtd bias = ", round(bias0[1], 4), ", ", round(bias1[1], 4))))
 }
 
-if(!dir.exists(here::here("simualtion_debug"))){
-  dir.create(here::here("simualtion_debug"))
+if(!dir.exists(here::here("simulation_debug"))){
+  dir.create(here::here("simulation_debug"))
 }
 
 settings = expand_grid(scen = 1:2,
