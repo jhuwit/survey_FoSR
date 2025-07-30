@@ -287,7 +287,7 @@ plot_results = function(scen, snr_b, snr_eps, sd_beta= 0.125,  inf_level = 0.5, 
   lst = generate_superpopulation(
     scenario = scen,
     family = "gaussian",
-    I = 10e5,
+    I = 10e6,
     L = 50,
     psu_sigma = psu_sigma,
     snr_b = snr_b,
