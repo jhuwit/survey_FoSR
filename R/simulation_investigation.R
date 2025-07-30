@@ -2,6 +2,8 @@ library(tidyverse)
 library(tidyfun)
 library(patchwork)
 source(here::here("R", "01_sim_functions.R"))
+source(here::here("R", "utils.R"))
+force = FALSE
 generate_superpopulation = function(I = 10e6, # size of superpopulation
                                     L = 50, # length of functional domain
                                     scenario = 1, # shape of function
@@ -209,19 +211,23 @@ sample_from_population_wor <- function(X_des, # design matrix
       inds_in_psu <- which(psu_assignments == psu &
                              stratum_assignments == strata)
 
+      if (inf_level == 0) {
+        inclusion_probs = rep(1 / length(inds_in_psu), length(inds_in_psu)) # uniform sampling
+      } else {
+        incl_score <- X1[inds_in_psu]  # Or your combination like: -0.6 * score1 + ...
+
+        # Step 1: Center and scale
+        score_raw <- scale(incl_score)
+
+        # Step 2: Compress range to avoid extreme logits
+        score_compressed <- score_raw * inf_level
+        score_compressed <- pmax(pmin(score_compressed, 2), -2)
+
+        # Step 3: Apply plogis
+        inclusion_probs <- plogis(score_compressed)
+      }
       # Informative sampling based on X1 or PC scores
-      incl_score <- X1[inds_in_psu]  # Or your combination like: -0.6 * score1 + ...
 
-      # Step 1: Center and scale
-      score_raw <- scale(incl_score)
-
-
-      # Step 2: Compress range to avoid extreme logits
-      score_compressed <- score_raw * inf_level
-      score_compressed <- pmax(pmin(score_compressed, 2), -2)
-
-      # Step 3: Apply plogis
-      inclusion_probs <- plogis(score_compressed)
       inclusion_probs <- inclusion_probs / sum(inclusion_probs) * I_n
       inclusion_probs[inclusion_probs > 1] <- 1
 
@@ -270,15 +276,18 @@ psu_sigma = sqrt(strata_sigma ^ 2 * 0.5)
 scen = 1
 snr_b = 1
 snr_eps = 1
-
+n = 500
 get_p_i = function(i, probs) probs[i] * (1 + sum((probs[-i]) / (1-probs[-i])))
+
+ifold = get_fold()
+
 
 
 plot_results = function(scen, snr_b, snr_eps, sd_beta= 0.125,  inf_level = 0.5, n = 500, seed = 1){
   lst = generate_superpopulation(
     scenario = scen,
     family = "gaussian",
-    I = 10e6,
+    I = 10e5,
     L = 50,
     psu_sigma = psu_sigma,
     snr_b = snr_b,
@@ -384,7 +393,9 @@ plot_results = function(scen, snr_b, snr_eps, sd_beta= 0.125,  inf_level = 0.5, 
                     subtitle = paste0("unwtd bias = ", round(bias0[2], 3), ", ", round(bias1[2], 3), " wtd bias = ", round(bias0[1], 4), ", ", round(bias1[1], 4))))
 }
 
-pdf(here::here("simulation_investigation.pdf"))
+if(!dir.exists(here::here("simualtion_debug"))){
+  dir.create(here::here("simualtion_debug"))
+}
 
 settings = expand_grid(scen = 1:2,
                        snr_b = c(.5, 1, 1.5, 5),
@@ -392,17 +403,27 @@ settings = expand_grid(scen = 1:2,
                        sd_beta = c(.05, .125, .25),
                        inf_level = c(0, .25, .5, .75, 1),
                        n = c(250, 500),
-                       seed = c(1, 2))
+                       seed = c(1, 2)) %>%
+  mutate(rn = row_number(),
+         fold = ceiling(rn / 100))
 
-for(row in 1:nrow(settings)){
-  temp = settings[row,]
-  plot_results(scen = temp$scen,
-               snr_b = temp$snr_b,
-               snr_eps = temp$snr_eps,
-               sd_beta = temp$sd_beta,
-               inf_level = temp$inf_level,
-               n = temp$n,
-               seed = temp$seed)
+settings = settings %>%
+  filter(fold == ifold)
+
+outfile = here::here("simulation_debug", paste0("plot_", sprintf("%02d", ifold), ".pdf"))
+if(!file.exists(outfile) || force){
+  pdf(outfile)
+
+  for(row in 1:nrow(settings)){
+    temp = settings[row,]
+    plot_results(scen = temp$scen,
+                 snr_b = temp$snr_b,
+                 snr_eps = temp$snr_eps,
+                 sd_beta = temp$sd_beta,
+                 inf_level = temp$inf_level,
+                 n = temp$n,
+                 seed = temp$seed)
+  }
+
+  dev.off()
 }
-
-dev.off()
