@@ -1,9 +1,29 @@
+library(future)
+library(furrr)
+library(tidyverse)
+library(here)
+library(devtools)
+library(fastFMM)
+library(haven)
+library(dplyr)
+library(survey)
+library(progress)
+library(lme4)
+library(paletteer)
+library(mgcv)
+library(ggplot2)
+library(gridExtra)
 library(tidyverse)
 library(tidyfun)
+library(mvtnorm)
+library(refund)
+library(svrep)
 library(patchwork)
 source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "utils.R"))
 force = FALSE
+
+# try with no population random effects
 generate_superpopulation = function(I = 10e6, # size of superpopulation
                                     L = 50, # length of functional domain
                                     scenario = 1, # shape of function
@@ -57,6 +77,60 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     psu_assignments[stratum_assignments == s] <- paste0(s, "_", psu_in_stratum)
   }
 
+  if(strata_sigma == 0 & psu_sigma == 0 & sd_beta == 0){
+    fixef_signal <- matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+
+    set.seed(seed)
+      sd_lp = sd(as.vector(t(fixef_signal)))
+      sigma = sd_lp / snr_eps
+
+      Y_obs =  matrix(
+        rnorm(
+          n = I * L,
+          mean = as.vector(t(fixef_signal)),
+          sd = sigma
+        ),
+        nrow = I,
+        ncol = L,
+        byrow = TRUE
+      )
+
+
+  } else if (sd_beta != 0 & strata_sigma == 0 & psu_sigma == 0){
+    set.seed(seed)
+    stratum_scaling <- rnorm(num_strata, mean = 1, sd = sd_beta)
+
+    beta1_by_stratum <- matrix(rep(stratum_scaling, each = L), nrow = num_strata) *
+      matrix(rep(beta_fixed[2, ], times = num_strata),
+             nrow = num_strata,
+             byrow = TRUE)
+
+    # assign to individuals
+    beta1_by_indiv <- beta1_by_stratum[stratum_assignments, ]
+    fixef_signal <- matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+
+    slope_re <- (stratum_scaling[stratum_assignments] - 1) *
+      matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    ranef <- slope_re
+    ranef <- sd(fixef_signal) / sd(ranef) / snr_b * ranef
+    set.seed(seed)
+    sd_lp = sd(as.vector(t(fixef_signal)) + as.vector(t(ranef)))
+    sigma = sd_lp / snr_eps
+
+    Y_obs =  matrix(
+      rnorm(
+        n = I * L,
+        mean = as.vector(t(fixef_signal)) + as.vector(t(ranef)),
+        sd = sigma
+      ),
+      nrow = I,
+      ncol = L,
+      byrow = TRUE
+    )
+
+  } else {
   ## create psu and strata-specific random effects
   nbasis <- 5
   basis <- fda::create.bspline.basis(c(0, 1), nbasis)
@@ -146,7 +220,7 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
       byrow = TRUE
     )
   }
-
+  }
   return(list(Y_obs = Y_obs,
               X_des = X_des,
               stratum_assignments = stratum_assignments,
@@ -165,7 +239,8 @@ sample_from_population_wor <- function(X_des, # design matrix
                                        psu_assignments, # assignment to psu (w/in strata)
                                        L = 50, # length of fnl domain
                                        seed = 1,
-                                       inf_level = .5
+                                      inf_level = 1,
+                                      limit_level = 3
 ){
   I = nrow(X_des)
   X1 = X_des[, 2]
@@ -221,7 +296,7 @@ sample_from_population_wor <- function(X_des, # design matrix
 
         # Step 2: Compress range to avoid extreme logits
         score_compressed <- score_raw * inf_level
-        score_compressed <- pmax(pmin(score_compressed, 3), -3)
+        score_compressed <- pmax(pmin(score_compressed, limit_level), -1*limit_level)
 
         # Step 3: Apply plogis
         inclusion_probs <- plogis(score_compressed)
@@ -271,170 +346,150 @@ sample_from_population_wor <- function(X_des, # design matrix
   return(data)
 }
 
-strata_sigma = 0.05
-psu_sigma = sqrt(strata_sigma ^ 2 * 0.5)
-scen = 1
-snr_b = 1
-snr_eps = 1
-n = 500
+# strata_sigma = 0.05
+# psu_sigma = sqrt(strata_sigma ^ 2 * 0.5)
+# scen = 1
+# snr_b = 2
+# snr_eps = 2
+# n = 500
+#
+# strata_sigma = 0
+# psu_sigma = 0
+# sd_beta = 0
+# scen = 1
+# snr_b = 2
+# snr_eps = 2
+# n = 500
 get_p_i = function(i, probs) probs[i] * (1 + sum((probs[-i]) / (1-probs[-i])))
 
+# ifold = 1
 ifold = get_fold()
 
+sd_beta = c(0, 0, 0.125, 0.125, 0, 0, 0.125, 0.125)
+psu_sigma = c(rep(0, 4), rep(sqrt(0.05 ^ 2 * 0.5), 4))
+strata_sigma = c(rep(0, 4), rep(0.05, 4))
+wts = c(0, 1, 0, 1, 0, 1, 0, 1)
+
+settings = tibble(sd_beta,
+                  psu_sigma,
+                  strata_sigma,
+                  wts)
 
 
-plot_results = function(scen, snr_b, snr_eps, sd_beta= 0.125,  inf_level = 0.5, n = 500, seed = 1){
-  lst = generate_superpopulation(
-    scenario = scen,
-    family = "gaussian",
-    I = 10e6,
-    L = 50,
-    psu_sigma = psu_sigma,
-    snr_b = snr_b,
-    snr_eps = snr_eps,
-    sd_beta = sd_beta
-  )
 
-  data = sample_from_population_wor(
-    X_des = lst$X_des,
-    Y_obs = lst$Y_obs,
-    L = 50,
-    I_n = n,
-    num_strata = 30,
-    stratum_assignments = lst$stratum_assignments,
-    psu_assignments = lst$psu_assignments,
-    dirichlet_probs = lst$dirichlet_probs,
-    seed = seed,
-    inf_level = inf_level
-  )
-
-  beta_true = lst$beta_true
-  rm(lst)
-  betaTilde = map(
-    .x = c("weighted", "unweighted"),
-    .f = get_betatilde,
-    data = data,
-    family = "gaussian"
-  )
-
-  betaHat = map(.x = betaTilde, get_betahat, L = 50)
-  # get bias
-  bias1 = map_dbl(.x = betaHat,
-                 .f = \(x) sum(abs(x[2,] - beta_true[2,])^2))
-  bias0 = map_dbl(.x = betaHat,
-                  .f = \(x) sum(abs(x[1,] - beta_true[1,])^2))
-  bias1; bias0
-
-  quants = quantile(data$weight, c(1/3, 2/3))
-
-  Y_mat = data %>%
-    select(starts_with("Y")) %>%
-    as.matrix()
+nsim = 200
+B = 500
+ncores = parallelly::availableCores() - 1
+fit_types = c('weighted', 'unweighted')
+boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted')
+options(survey.lonely.psu = "adjust")
 
 
-  mean_df =
-    data %>%
-    mutate(Y = I(Y_mat)) %>%
-    mutate(quant = cut(weight, breaks = c(-Inf, quants, Inf), labels = c("low", "med", "high"))) %>%
-    mutate(Y = matrix(Y, ncol = 50),
-           Y_tf = tfd(Y, length = 50),
-           Y_smooth = tf_smooth(Y_tf, method = "lowess")) %>%
-    group_by(quant) %>%
-    summarize(Y_mean_strat = mean(Y_tf)) %>%
-    ungroup() %>%
-    mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
+temp = settings[ifold, ] # set settings for this simulation
 
-  overall_df =
-    data %>%
-    mutate(Y = I(Y_mat)) %>%
-    mutate(Y = matrix(Y, ncol = 50),
-           Y_tf = tfd(Y, length = 50),
-           Y_smooth = tf_smooth(Y_tf, method = "lowess")) %>%
-    summarize(Y_mean_strat = mean(Y_tf)) %>%
-    mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
+lst = generate_superpopulation(
+  scenario = 1,
+  family = "gaussian",
+  I = 10e6,
+  L = 50,
+  psu_sigma = temp$psu_sigma,
+  snr_b = 2,
+  snr_eps = 2,
+  strata_sigma = temp$strata_sigma,
+  sd_beta = temp$sd_beta,
+  seed = 111
+)
 
-  p1 = mean_df %>%
-    ggplot() +
-    geom_spaghetti(aes(y = Y_mean_strat, color = quant), linewidth = 1.1, alpha = 1) +
-    scale_color_discrete(name = "Weight tertile") +
-    labs(x = "Functional domain", y = "Y") +
-    geom_spaghetti(data = overall_df, aes(y= Y_mean_strat), color = "black", linetype = "dashed") +
-    theme_light()
+fname = here::here("simulation_debug", "sims", paste0("sim_", sprintf("%02d", ifold), ".rds"))
 
-  btt = beta_true %>%
-    t() %>%
-    as.data.frame() %>%
-    magrittr::set_colnames(c("(Intercept)", "X")) %>%
-    mutate(l = row_number()) %>%
-    pivot_longer(cols = -l) %>%
-    mutate(type = "truth")
+plan(multisession, workers = ncores)
 
-  beta_t = betaTilde %>%
-    map(~ as.data.frame(t(.x))) %>%
-    bind_rows(.id = "type") %>%
-    group_by(type) %>%
-    mutate(l = row_number()) %>%
-    pivot_longer(cols = -c(type, l)) %>%
-    mutate(type = if_else(type == 1, "weighted", "unweighted"))
+sim_res <- list() ## store simulation results
+ci_res <- list()
+for (iter in 1:nsim) {
+  set.seed(iter)
+  x = try({
+    data <- sample_from_population_wor(
+      X_des = lst$X_des,
+      Y_obs = lst$Y_obs,
+      L = 50,,
+      I_n = 500,
+      num_strata = 30,
+      stratum_assignments = lst$stratum_assignments,
+      psu_assignments = lst$psu_assignments,
+      dirichlet_probs = lst$dirichlet_probs,
+      seed = iter,
+      inf_level = temp$wts
+    )
 
-  p2 =  betaHat %>%
-    map(~ as.data.frame(t(.x))) %>%
-    bind_rows(.id = "type") %>%
-    group_by(type) %>%
-    mutate(l = row_number()) %>%
-    pivot_longer(cols = -c(type, l)) %>%
-    mutate(type = if_else(type == 1, "weighted", "unweighted"),
-           sm = "smooth") %>%
-    bind_rows(beta_t %>% mutate(sm = "raw")) %>%
-    ggplot(aes(x = l, y = value, color = type, linetype = sm)) +
-   labs(x = "Functional domain", y = "Coefficient") +
-    geom_line() +
-    facet_wrap(.~name, scales = "free_y") +
-    geom_line(data = btt, aes(x = l, y = value, color = type), linetype = "dashed") +
-   theme_light()  +
-   scale_color_brewer(palette = "Dark2", name = "")
+    beta_true = lst$beta_true
+    betaTilde = map(
+      .x = fit_types,
+      .f = get_betatilde,
+      data = data,
+      family = "gaussian")
 
- rm(data)
- rm(Y_mat)
- rm(beta_true)
- rm(mean_df)
- gc()
- print(p1 + p2 + plot_layout(ncol = 1) +
-    plot_annotation(title = paste0("Inf level: ", inf_level, ", n = ", n, ", snr_b = ", snr_b, ", snr_eps = ", snr_eps, ", sd_beta = ", sd_beta, ", scenario = ", scen),
-                    subtitle = paste0("unwtd bias = ", round(bias0[2], 3), ", ", round(bias1[2], 3), " wtd bias = ", round(bias0[1], 4), ", ", round(bias1[1], 4))))
+    betaHat = map(.x = betaTilde, get_betahat, L = 50)
+
+
+    res = future_map(
+      .x = boot_types,
+      .f = run_boots_fast,
+      betaHat = betaHat[[1]],
+      data = data,
+      family = "gaussian",
+      num_boots = B,
+      seed = 2025,
+      L = 50,
+      samp_stages = c("PPSWOR", "Poisson"),
+      .options = furrr_options(seed = TRUE)
+    )
+
+    fit_list = list(betaHat[[1]], betaHat[[1]], betaHat[[1]], betaHat[[2]])
+
+    cis = future_map2(
+      .x = res,
+      .y = fit_list,
+      .f = get_cis,
+      L = 50,
+      smooth_for_ci = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )
+
+    stats = future_map2(
+      .x = cis,
+      .y = boot_types,
+      .f = get_coverage_stats,
+      beta_true = beta_true,
+      L = temp$len
+    ) %>%
+      list_rbind() %>%
+      mutate(n = nrow(data), n_boot = B)
+
+
+    sim_res[[iter]] <- stats
+    ci_res[[iter]] <- cis
+  })
+  rm(x)
+  print(iter)
 }
 
-if(!dir.exists(here::here("simulation_debug"))){
-  dir.create(here::here("simulation_debug"))
+plan(sequential)
+result =
+  sim_res %>%
+  keep(., is.data.frame) %>%
+  list_rbind(names_to = "id")
+
+
+if(!dir.exists(here::here("simulation_debug", "sims"))){
+  dir.create(here::here("simulation_debug", "sims"))
 }
 
-settings = expand_grid(scen = 1:2,
-                       snr_b = c(.5, 1, 1.5, 5),
-                       snr_eps = c(.5, 1, 1.5, 5),
-                       sd_beta = c(.05, .125, .25),
-                       inf_level = c(0, .25, .5, .75, 1),
-                       n = c(250, 500),
-                       seed = c(1, 2)) %>%
-  mutate(rn = row_number(),
-         fold = ceiling(rn / 100))
+write_rds(result,
+          here::here("simulation_debug/sims", fname))
+write_rds(ci_res,
+          here::here("simulation_debug/sims", paste0("cis_", fname)))
 
-settings = settings %>%
-  filter(fold == ifold)
 
-outfile = here::here("simulation_debug", paste0("plot_", sprintf("%02d", ifold), ".pdf"))
-if(!file.exists(outfile) || force){
-  pdf(outfile)
 
-  for(row in 1:nrow(settings)){
-    temp = settings[row,]
-    plot_results(scen = temp$scen,
-                 snr_b = temp$snr_b,
-                 snr_eps = temp$snr_eps,
-                 sd_beta = temp$sd_beta,
-                 inf_level = temp$inf_level,
-                 n = temp$n,
-                 seed = temp$seed)
-  }
 
-  dev.off()
-}
