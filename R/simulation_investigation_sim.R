@@ -461,7 +461,7 @@ for (iter in 1:nsim) {
       .y = boot_types,
       .f = get_coverage_stats,
       beta_true = beta_true,
-      L = temp$len
+      L = 50
     ) %>%
       list_rbind() %>%
       mutate(n = nrow(data), n_boot = B)
