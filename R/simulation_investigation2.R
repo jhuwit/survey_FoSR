@@ -300,7 +300,7 @@ n = 500
 get_p_i = function(i, probs) probs[i] * (1 + sum((probs[-i]) / (1-probs[-i])))
 
 ifold = get_fold()
-ifold = 1
+# ifold = 1
 
 
 plot_results = function(scen, snr_b, snr_eps, sd_beta= 0.125,  inf_level = 0.5, n = 500, seed = 1,
