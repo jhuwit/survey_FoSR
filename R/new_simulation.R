@@ -1,6 +1,23 @@
+library(future)
+library(furrr)
+library(tidyverse)
+library(here)
+library(devtools)
+library(fastFMM)
+library(haven)
+library(dplyr)
+library(survey)
+library(progress)
+library(lme4)
+library(paletteer)
+library(mgcv)
+library(ggplot2)
+library(gridExtra)
 library(tidyverse)
 library(tidyfun)
-library(patchwork)
+library(mvtnorm)
+library(refund)
+library(svrep)
 source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "utils.R"))
 force = TRUE
@@ -389,7 +406,7 @@ temp = settings[ifold, ] # set settings for this simulation
 lst = generate_superpopulation(
   scenario = 1,
   family = "gaussian",
-  I = 10e5,
+  I = 10e6,
   L = 50,
   snr_b = temp$snr_b,
   snr_eps = temp$snr_eps,
