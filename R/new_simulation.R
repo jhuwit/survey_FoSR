@@ -416,7 +416,8 @@ lst = generate_superpopulation(
 )
 
 
-fname = here::here("simulation_debug", "sims2", paste0("sim_", sprintf("%02d", ifold), ".rds"))
+fname1 = here::here("simulation_debug", "sims2", paste0("sim_", sprintf("%02d", ifold), ".rds"))
+fname2 = here::here("simulation_debug", "sims2", paste0("cis_sim_", sprintf("%02d", ifold), ".rds"))
 
 plan(multisession, workers = ncores)
 
@@ -501,9 +502,11 @@ if(!dir.exists(here::here("simulation_debug", "sims2"))){
   dir.create(here::here("simulation_debug", "sims2"), recursive = TRUE)
 }
 write_rds(result,
-          here::here("simulation_debug/sims2", fname))
+          fname1)
+
+
 write_rds(ci_res,
-          here::here("simulation_debug/sims2", paste0("cis_", fname)))
+          fname2)
 
 
 
