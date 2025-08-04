@@ -41,10 +41,12 @@ temp = settings %>%
 outfile = here::here("results", "simulations", "survey_sim", paste0("fold_", sprintf("%03d", ifold), ".rds"))
 
 # create partial dir to store ea. iteration
+
+if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
+
 partial_dir = here::here("results", "simulations", "survey_sim", paste0("fold_", sprintf("%03d", ifold), "_partials"))
 if (!dir.exists(partial_dir)) dir.create(partial_dir)
 
-if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile))
 
 completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
   str_extract("\\d+") %>%
