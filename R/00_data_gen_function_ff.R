@@ -169,7 +169,7 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
 
     ## add stratum-specific slope modifications
     set.seed(seed)
-    stratum_scaling <- rnorm(num_strata, mean = 1, sd = sd_beta)
+    stratum_scaling <- rnorm(num_strata, mean = 1, sd = strata_scale)
 
     beta1_by_stratum <- matrix(rep(stratum_scaling, each = L), nrow = num_strata) *
       matrix(rep(beta_fixed[2, ], times = num_strata),
