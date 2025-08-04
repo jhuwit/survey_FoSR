@@ -56,7 +56,7 @@ if(!file.exists(outfile) || force) {
   lst = generate_superpopulation(
     scenario = temp$scenario,
     family = temp$family,
-    I = 10e5,
+    I = 10e6,
     L = temp$len,
     snr_b = temp$snr_b,
     snr_eps = temp$snr_eps,

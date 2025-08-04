@@ -18,9 +18,7 @@ library(tidyfun)
 library(mvtnorm)
 library(refund)
 library(svrep)
-source(here::here("R", "01_sim_functions.R"))
-source(here::here("R", "utils.R"))
-force = TRUE
+
 
 generate_superpopulation = function(I = 10e6, # size of superpopulation
                                     L = 50, # length of functional domain
@@ -34,13 +32,13 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
                                     snr_b = 1, # signal noise ratio for random to fixed effects
                                     snr_eps = 1 # signal to noise for gaussian
 ){
-  stopifnot("scenario must be either 1 or 2" = scenario %in% c(1, 2))
-  stopifnot("family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"))
-  stopifnot("I must be greater than 1000" = I > 1000)
-  stopifnot("I must be greater than or equal to 25" = L >= 25)
-  stopifnot("num_strata must be greater than 0" = num_strata > 0)
-  stopifnot("strata_sigma, psu_factor and strata_scale must be greater than or equal to 0" = all(c(strata_sigma, psu_factor, strata_scale) >= 0))
-  stopifnot("signal to noise ratios must be greater than 0" = all(c(snr_b, snr_eps) > 0))
+  stopifnot("scenario must be either 1 or 2" = scenario %in% c(1, 2),
+            "family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"),
+            "I must be greater than 1000" = I > 1000,
+            "I must be greater than or equal to 25" = L >= 25,
+            "num_strata must be greater than 0" = num_strata > 0,
+            "strata_sigma, psu_factor and strata_scale must be greater than or equal to 0" = all(c(strata_sigma, psu_factor, strata_scale) >= 0),
+            "signal to noise ratios must be greater than 0" = all(c(snr_b, snr_eps) > 0))
 
   set.seed(seed)
   X_des <- cbind(1, rnorm(I, 0, 2))
@@ -211,10 +209,10 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     Y_obs = matrix(
       rnorm(n = I * L,
             mean = as.vector(t(lin_pred)),
-                             sd = sigma), # need to use t to put in correct order
-            nrow = I,
-            ncol = L,
-            byrow = TRUE
+            sd = sigma), # need to use t to put in correct order
+      nrow = I,
+      ncol = L,
+      byrow = TRUE
     )
   } else if(family == "binomial") {
     p_true = plogis(as.vector(t(lin_pred)))
@@ -249,8 +247,10 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
               beta_true = beta_fixed))
 }
 
+
 get_p_i = function(i, probs) probs[i] * (1 + sum((probs[-i]) / (1-probs[-i])))
-sample_from_population_wor <- function(X_des, # design matrix
+
+sample_from_population_wor = function(X_des, # design matrix
                                        Y_obs, # y matrix
                                        I_n = 500, # subjects in each psu-strata combination
                                        num_strata = 30,  # total strata
@@ -310,36 +310,15 @@ sample_from_population_wor <- function(X_des, # design matrix
       if (inf_level == 0) {
         inclusion_probs = rep(1 / length(inds_in_psu), length(inds_in_psu)) # uniform sampling
       } else {
-
-        #
-        # incl_score <- X1[inds_in_psu]  # Or your combination like: -0.6 * score1 + ...
-        #
-        # # Step 1: Center and scale
-        # score_raw <- scale(incl_score)
-        #
-        # # Step 2: Compress range to avoid extreme logits
-        # score_compressed <- score_raw * inf_level
-        # score_compressed <- pmax(pmin(score_compressed, 3), -3)
-
-        # Step 3: Apply plogis
-        # inclusion_probs <- plogis(score_compressed)
-
         incl_score = rowMeans(Y_obs[inds_in_psu,]) * inf_level
         score_compressed <- pmax(pmin(incl_score, compression), -1 * compression)
-
         inclusion_probs = plogis(score_compressed)
 
       }
-      # Informative sampling based on X1 or PC scores
 
       inclusion_probs <- inclusion_probs / sum(inclusion_probs) * I_n
       inclusion_probs[inclusion_probs > 1] <- 1
 
-      #
-      # inclusion_probs <- plogis(incl_score)
-      # inclusion_probs <- inclusion_probs / sum(inclusion_probs)
-      # inclusion_probs <- inclusion_probs * I_n
-      # inclusion_probs[inclusion_probs > 1] <- 1
       set.seed(strata + seed + which(selected_psus == psu)) # ensure reproducibility
       sampled_units <- inds_in_psu[rbinom(length(inds_in_psu), 1, inclusion_probs) == 1]
 
@@ -374,144 +353,3 @@ sample_from_population_wor <- function(X_des, # design matrix
   data =  cbind(dat.sim, Y_sample)
   return(data)
 }
-
-# x = generate_superpopulation(I = 10e5, strata_sigma = 0, strata_scale = 0)
-# x = generate_superpopulation(I = 10e5, strata_sigma = 0, strata_scale = .125)
-# x = generate_superpopulation(I = 10e5, strata_sigma = .5, strata_scale = .125)
-# x = generate_superpopulation(I = 10e5, strata_sigma = 0.5, strata_scale = 0)
-
-
-
-ifold = get_fold()
-
-
-
-settings = expand_grid(strata_scale = c(0, 0.125),
-                  strata_sigma = c(0, 0.05),
-                  snr_b = c(0.5, 1, 5),
-                  snr_eps = c(0.5, 1, 5),
-                  inf_level = c(0, 5, 10))
-
-
-settings %>%
-  mutate(fold = row_number()) %>%
-  filter(strata_scale == 0 & strata_sigma == 0 & snr_b != 0.5) %>%
-  pull(fold)
-nsim = 100
-B = 500
-ncores = parallelly::availableCores() - 1
-fit_types = c('weighted', 'unweighted')
-boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted')
-options(survey.lonely.psu = "adjust")
-
-
-temp = settings[ifold, ] # set settings for this simulation
-
-lst = generate_superpopulation(
-  scenario = 1,
-  family = "gaussian",
-  I = 10e6,
-  L = 50,
-  snr_b = temp$snr_b,
-  snr_eps = temp$snr_eps,
-  strata_sigma = temp$strata_sigma,
-  strata_scale = temp$strata_scale,
-  seed = 111
-)
-
-
-fname1 = here::here("simulation_debug", "sims2", paste0("sim_", sprintf("%02d", ifold), ".rds"))
-fname2 = here::here("simulation_debug", "sims2", paste0("cis_sim_", sprintf("%02d", ifold), ".rds"))
-
-plan(multisession, workers = ncores)
-
-sim_res <- list() ## store simulation results
-ci_res <- list()
-for (iter in 1:nsim) {
-  set.seed(iter)
-  x = try({
-    data <- sample_from_population_wor(
-      X_des = lst$X_des,
-      Y_obs = lst$Y_obs,
-      L = 50,
-      I_n = 500,
-      num_strata = 30,
-      stratum_assignments = lst$stratum_assignments,
-      psu_assignments = lst$psu_assignments,
-      dirichlet_probs = lst$dirichlet_probs,
-      seed = iter,
-      inf_level = temp$inf_level
-    )
-
-    beta_true = lst$beta_true
-    betaTilde = map(
-      .x = fit_types,
-      .f = get_betatilde,
-      data = data,
-      family = "gaussian")
-
-    betaHat = map(.x = betaTilde, get_betahat, L = 50)
-
-
-    res = future_map(
-      .x = boot_types,
-      .f = run_boots_fast,
-      betaHat = betaHat[[1]],
-      data = data,
-      family = "gaussian",
-      num_boots = B,
-      seed = 2025,
-      L = 50,
-      samp_stages = c("PPSWOR", "Poisson"),
-      .options = furrr_options(seed = TRUE)
-    )
-
-    fit_list = list(betaHat[[1]], betaHat[[1]], betaHat[[1]], betaHat[[2]])
-
-    cis = future_map2(
-      .x = res,
-      .y = fit_list,
-      .f = get_cis,
-      L = 50,
-      smooth_for_ci = TRUE,
-      .options = furrr_options(seed = TRUE)
-    )
-
-    stats = future_map2(
-      .x = cis,
-      .y = boot_types,
-      .f = get_coverage_stats,
-      beta_true = beta_true,
-      L = 50
-    ) %>%
-      list_rbind() %>%
-      mutate(n = nrow(data), n_boot = B)
-
-
-    sim_res[[iter]] <- stats
-    ci_res[[iter]] <- cis
-  })
-  rm(x)
-  print(iter)
-}
-
-plan(sequential)
-result =
-  sim_res %>%
-  keep(., is.data.frame) %>%
-  list_rbind(names_to = "id")
-
-
-if(!dir.exists(here::here("simulation_debug", "sims2"))){
-  dir.create(here::here("simulation_debug", "sims2"), recursive = TRUE)
-}
-write_rds(result,
-          fname1)
-
-
-write_rds(ci_res,
-          fname2)
-
-
-
-
