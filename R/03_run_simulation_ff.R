@@ -34,7 +34,7 @@ options(survey.lonely.psu = "adjust")
 
 
 ifold = get_fold()
-ifold = 1
+
 temp = settings %>%
   filter(fold == ifold)
 
