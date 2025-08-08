@@ -60,12 +60,11 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
   #   run_bayes = TRUE
   # }
   run_bayes = FALSE
-  if(family == "gaussian"){ # if gaussian, we don't need to bootstrap so don't need inner parallelization
-    ncores_outer = ncores_total
-  } else{
-    ncores_outer = ceiling(ncores_total / 2)
-    ncores_inner = ncores_total - ncores_outer
-  }
+
+  ncores_outer = ceiling(ncores_total / 2)
+
+  ncores_inner = ncores_total - ncores_outer
+
   plan(multisession, workers = ncores_outer)
   sim_res <- future_map(1:nsims, function(iter) {
     x = try({
