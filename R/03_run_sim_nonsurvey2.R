@@ -22,27 +22,19 @@ source(here::here("R", "sim_functions_unwt.R"))
 ncores_total = parallelly::availableCores() - 1
 force = TRUE
 
+
 source(here::here("R", "utils.R"))
 sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
 
+sim_settings = sim_settings %>%
+  filter(L <= 500, num_boots == 500)
 
-keep_folds =
-  sim_settings %>%
-  filter(num_boots == 500) %>%
-  group_by(family, scenario, L, n) %>%
-  slice(1) %>%
-  ungroup() %>%
-  pull(fold)
-
-sim_settings =
-  sim_settings %>%
-  filter(num_boots == 500) %>%
-  filter(family == "gaussian" | fold %in% keep_folds)
-
-sim_settings %>%
-  filter(family != "gaussian") %>%
+folds_redo = sim_settings %>%
+  filter(family == "gaussian") %>%
   pull(fold) %>%
   paste(collapse = ",")
+# folds_redo
+
 
 ifold = get_fold()
 # ifold = 111
