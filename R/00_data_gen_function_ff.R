@@ -232,7 +232,7 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     set.seed(seed)
     Y_obs  = matrix(
       rpois(n = I * L,
-            lambda = lin_pred_vec),
+            lambda = lam_true),
       nrow = I,
       ncol = L,
       byrow = TRUE
