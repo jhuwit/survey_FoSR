@@ -63,7 +63,10 @@ if(!file.exists(outfile) || force) {
 
   weights = list()
 
-  pdf(here::here(outfile))
+  if(!file.exists(outfile)) {
+     pdf(here::here(outfile))
+  }
+  # pdf(here::here(outfile))
   for (iter in 1:nsim) {
 
     set.seed(iter)
@@ -80,26 +83,30 @@ if(!file.exists(outfile) || force) {
         inf_level = temp$inf_level
       )
       weights[[iter]] = summary(data$weight) %>% unname()
-      summary = summary(data$weight)
-      p1 = data %>%
-        ggplot(aes(x = weight)) +
-        geom_histogram(col = "black")
+      if(!file.exists(outfile)) {
+        pdf(here::here(outfile))
+        p1 = data %>%
+          ggplot(aes(x = weight)) +
+          geom_histogram(col = "black")
 
-      p2 =
-        data %>%
-        mutate(wt_norm = weight / mean(weight)) %>%
-        ggplot(aes(x = wt_norm)) +
-        geom_histogram(col = "black")
+        p2 =
+          data %>%
+          mutate(wt_norm = weight / mean(weight)) %>%
+          ggplot(aes(x = wt_norm)) +
+          geom_histogram(col = "black")
 
-      print(p1 / p2)
+        print(p1 / p2)
+      }
+
       rm(data)
   }
-  dev.off()
-  wt_df = bind_rows(weights) %>%
-    magrittr::set_colnames(c("Min", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max"))
+  if(!file.exists(outfile)) {
+    dev.off()
+  }
 
-
-  write_rds(wt_df, file = outfile_dist)
+  if(!file.exists(outfile_dist)){
+    write_rds(weights, file = outfile_dist)
+  }
 
 
 }
