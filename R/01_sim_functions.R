@@ -74,7 +74,7 @@ get_betatilde = function(data, family = "gaussian", type = "weighted",
   return(betaTilde)
 }
 
-get_betahat = function(betaTilde, L = 50,
+get_betahat = function(betaTilde, L,
                        nknots_min = NULL){
   argvals = 1:L
   nknots <- min(round(L / 2), nknots_min)
@@ -204,7 +204,7 @@ run_boots_old = function(data, boot_type, betaHat, family = "gaussian",
 }
 
 run_boots = function(data, boot_type, betaHat, family = "gaussian",
-                         num_boots = 500, set_seed = TRUE, seed = 2025, L = 50,
+                         num_boots = 500, set_seed = TRUE, seed = 2025, L,
                          samp_stages = NULL,
                          model_formula = as.formula(paste0('Y~', 'X'))){
    argvals = 1:L
@@ -346,7 +346,7 @@ run_boots = function(data, boot_type, betaHat, family = "gaussian",
 }
 
 run_boots_fast = function(data, boot_type, betaHat, family = "gaussian",
-                          num_boots = 500, seed = 2025, L = 50,
+                          num_boots = 500, seed = 2025, L,
                           samp_stages = NULL,
                           model_formula = as.formula(paste0('Y~', 'X'))) {
   if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "weighted", "unweighted"))){
@@ -475,7 +475,7 @@ run_boots_fast = function(data, boot_type, betaHat, family = "gaussian",
 }
 
 run_boots_fast_internal = function(data, boot_type, betaHat, family = "gaussian",
-                          num_boots = 500, seed = 2025, L = 50,
+                          num_boots = 500, seed = 2025, L,
                           samp_stages = NULL,
                           model_formula = as.formula(paste0('Y~', 'X')),
                           ncores = 2) {
@@ -610,7 +610,7 @@ get_cis = function(betaTilde_boot,
                    betaHat,
                    smooth_for_ci = TRUE,
                    smooth_for_variance = TRUE,
-                   L = 50,
+                   L,
                    nknots_min = NULL,
                    nknots_min_cov = 35,
                    mult_fac = 1.2) {
@@ -689,7 +689,7 @@ get_cis = function(betaTilde_boot,
 # mod_output = get_cis(res[[1]], betaHat = betaHat)
 #
 
-get_coverage_stats = function(mod_output, beta_true, name, L = 50){
+get_coverage_stats = function(mod_output, beta_true, name, L){
   MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
   mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
   mean_joint_se <- numeric(nrow(beta_true))  # Store mean CI width
