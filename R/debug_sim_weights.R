@@ -44,9 +44,10 @@ outfile_dist = here::here("debug", "weight_summ", paste0("fold_", sprintf("%03d"
 # create partial dir to store ea. iteration
 
 if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
+if (!dir.exists(dirname(outfile_dist))) dir.create(dirname(outfile_dist), recursive = TRUE)
 
 
-if(!file.exists(outfile) || force) {
+if(!file.exists(outfile_dist) || force) {
   temp = settings[ifold, ] # set settings for this simulation
 
   lst = generate_superpopulation(
