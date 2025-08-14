@@ -25,7 +25,8 @@ source(here::here("R", "utils.R"))
 source(here::here("R", "create_settings.R"))
 
 force = FALSE
-nsim = 100
+force_plot = FALSE
+nsim = 50
 B = 500
 ncores = parallelly::availableCores() - 1
 fit_types = c('weighted', 'unweighted')
@@ -43,20 +44,24 @@ get_se = function(mod_output){
 
 ## plot std error as function of domain
 
-ifold = get_fold()
+ifold = 25
 
 temp = settings %>%
   filter(fold == ifold)
 
-outfile = here::here("debug", "bias_se", paste0("fold_", sprintf("%03d", ifold), ".pdf"))
+outfile = here::here("debug", "bias_se", paste0("fold_tst", sprintf("%03d", ifold), ".pdf"))
+outfile2 = here::here("debug", "bias_se_dfs", paste0("fold_se_tst2", sprintf("%03d", ifold), ".rds"))
+outfile3 = here::here("debug", "bias_se_dfs", paste0("fold_bias_tst2", sprintf("%03d", ifold), ".rds"))
+
 # create partial dir to store ea. iteration
 
 if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
+if (!dir.exists(dirname(outfile2))) dir.create(dirname(outfile2), recursive = TRUE)
 
 biases = list()
 ses = list()
 
-if(!file.exists(outfile) || force) {
+if(!file.exists(outfile2) || force) {
   temp = settings[ifold, ] # set settings for this simulation
 
   lst = generate_superpopulation(
@@ -83,7 +88,8 @@ if(!file.exists(outfile) || force) {
       psu_assignments = lst$psu_assignments,
       dirichlet_probs = lst$dirichlet_probs,
       seed = iter,
-      inf_level = temp$inf_level
+      inf_level = 20,
+      compression = 2,
     )
     beta_true = lst$beta_true
     betaTilde = map(
@@ -154,6 +160,9 @@ if(!file.exists(outfile) || force) {
     bind_rows(biases, .id = "iter")
 
   ses_df = bind_rows(ses, .id = "iter")
+
+  write_rds(res_df, outfile3)
+  write_rds(ses_df, outfile2)
   # plt = res_df %>%
   #   filter(var == "X") %>%
   #   ggplot(aes(x = l, y = value, color = type)) +
@@ -161,34 +170,37 @@ if(!file.exists(outfile) || force) {
   #   facet_wrap(iter~., nrow = 10, ncol = 10) +
   #   geom_hline(aes(yintercept = 0))
 
-  bias_plt =
-    res_df %>%
-    filter(var == "X") %>%
-    ggplot(aes(x = l, y = value, color = type, fill = type)) +
-    geom_smooth() +
-    geom_hline(aes(yintercept = 0), linetype = "dashed") +
-    labs(x = "Functional Domain", y = "Mean Bias") +
-    scale_color_brewer(palette = "Dark2") +
-    scale_fill_brewer(palette = "Dark2")
+  if(!file.exists(outfile) || force_plot){
+    bias_plt =
+      res_df %>%
+      filter(var == "X") %>%
+      ggplot(aes(x = l, y = value, color = type, fill = type)) +
+      geom_smooth() +
+      geom_hline(aes(yintercept = 0), linetype = "dashed") +
+      labs(x = "Functional Domain", y = "Mean Bias") +
+      scale_color_brewer(palette = "Dark2") +
+      scale_fill_brewer(palette = "Dark2")
 
-  se_plt =
-    ses_df %>%
-    filter(var == "X") %>%
-    ggplot(aes(x = l, y = value, color = boot_type, fill = boot_type)) +
-    geom_smooth() +
-    facet_wrap(.~boot_type, nrow = 1) +
-    labs(x = "Functional Domain", y = "Mean SE")
+    se_plt =
+      ses_df %>%
+      filter(var == "X") %>%
+      ggplot(aes(x = l, y = value, color = boot_type, fill = boot_type)) +
+      geom_smooth() +
+      facet_wrap(.~boot_type, nrow = 1) +
+      labs(x = "Functional Domain", y = "Mean SE")
 
-  se_plt_ov =
-    ses_df %>%
-    filter(var == "X") %>%
-    ggplot(aes(x = l, y = value, color = boot_type, fill = boot_type)) +
-    geom_smooth() +
-    labs(x = "Functional Domain", y = "Mean SE")
+    se_plt_ov =
+      ses_df %>%
+      filter(var == "X") %>%
+      ggplot(aes(x = l, y = value, color = boot_type, fill = boot_type)) +
+      geom_smooth() +
+      labs(x = "Functional Domain", y = "Mean SE")
 
-  pdf(outfile)
-  print(bias_plt / (se_plt + se_plt_ov + plot_layout(guides = "collect", axes = "collect")))
-  dev.off()
+    pdf(outfile)
+    print(bias_plt / (se_plt + se_plt_ov + plot_layout(guides = "collect", axes = "collect")))
+    dev.off()
+  }
+
 
 }
 
