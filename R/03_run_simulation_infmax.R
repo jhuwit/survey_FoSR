@@ -48,6 +48,7 @@ partial_dir = here::here("results", "simulations", "survey_sim2", paste0("fold_"
 if (!dir.exists(partial_dir)) dir.create(partial_dir)
 
 partial_dir2 = here::here("results", "simulations", "survey_sim2", paste0("fold_", sprintf("%03d", ifold), "_partials2"))
+if (!dir.exists(partial_dir2)) dir.create(partial_dir2)
 
 completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
   str_extract("\\d+") %>%
