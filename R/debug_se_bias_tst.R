@@ -88,7 +88,8 @@ if(!file.exists(outfile2) || force) {
       psu_assignments = lst$psu_assignments,
       dirichlet_probs = lst$dirichlet_probs,
       seed = iter,
-      inf_level = 10
+      inf_level = 10,
+      compression = 3
     )
     beta_true = lst$beta_true
     betaTilde = map(

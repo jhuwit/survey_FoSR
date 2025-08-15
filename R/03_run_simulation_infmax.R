@@ -38,15 +38,16 @@ ifold = get_fold()
 temp = settings %>%
   filter(fold == ifold)
 
-outfile = here::here("results", "simulations", "survey_sim", paste0("fold_test_", sprintf("%03d", ifold), ".rds"))
-
+outfile = here::here("results", "simulations", "survey_sim2", paste0("fold_", sprintf("%03d", ifold), ".rds"))
+outfile2 = here::here("results", "simulations", "survey_sim2", paste0("fold_", sprintf("%03d", ifold), "_res.rds"))
 # create partial dir to store ea. iteration
 
 if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
 
-partial_dir = here::here("results", "simulations", "survey_sim", paste0("fold_test_", sprintf("%03d", ifold), "_partials"))
+partial_dir = here::here("results", "simulations", "survey_sim2", paste0("fold_", sprintf("%03d", ifold), "_partials"))
 if (!dir.exists(partial_dir)) dir.create(partial_dir)
 
+partial_dir2 = here::here("results", "simulations", "survey_sim2", paste0("fold_", sprintf("%03d", ifold), "_partials2"))
 
 completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
   str_extract("\\d+") %>%
@@ -140,6 +141,7 @@ if(!file.exists(outfile) || force) {
 
 
       write_rds(stats, file = file.path(partial_dir, sprintf("iter_%03d.rds", iter)))
+      write_rds(res, file = file.path(partial_dir2, sprintf("iter_%03d.rds", iter)))
 
     })
     rm(x)
@@ -156,7 +158,15 @@ if(!file.exists(outfile) || force) {
 
   write_rds(sim_res, file = outfile)
 
+  partial_files2 = list.files(partial_dir2, pattern = "^iter_\\d+\\.rds$", full.names = TRUE)
+
+  sim_res = map(partial_files, read_rds)
+
+  write_rds(sim_res, file = outfile2)
+
   unlink(partial_dir, recursive = TRUE)
+  unlink(partial_dir2, recursive = TRUE)
+
 
 }
 
