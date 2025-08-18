@@ -161,7 +161,7 @@ if(!file.exists(outfile) || force) {
 
   partial_files2 = list.files(partial_dir2, pattern = "^iter_\\d+\\.rds$", full.names = TRUE)
 
-  sim_res = map(partial_files, read_rds)
+  sim_res = map(partial_files2, read_rds)
 
   write_rds(sim_res, file = outfile2)
 
