@@ -285,30 +285,30 @@ df |>
 
 #### Visualize 95%CI
 ```{r}
-betaTilde_boot = run_boots(
-  sim.data,
-  boot_type = 'Preston',
-  betaHat = betaHat,
-  L = L,
-  num_boots = 300,
-  model_formula = as.formula('Y~X')
-)
-
-mod_output = get_cis(betaTilde_boot,
-        betaHat,
-        smooth_for_ci = TRUE,
-        smooth_for_variance = FALSE, # False
-        L = L)
-
-results = get_coverage_stats(mod_output,
-                             beta_true = t(results.lr |> select(-Variable))[,1:L],
-                             name = 'Preston',
-                             # boot_type
-                             L = L)
-
-write_rds(betaHat, 'tmp_result/betaHat_NI_noOrigial_survey_betaHat.rds')
-write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_noOrigial_survey_betaTilde_boot.rds')
-write_rds(mod_output, 'tmp_result/betaHat_NI_noOrigial_survey_mod_output.rds')
+# betaTilde_boot = run_boots(
+#   sim.data,
+#   boot_type = 'Preston',
+#   betaHat = betaHat,
+#   L = L,
+#   num_boots = 300,
+#   model_formula = as.formula('Y~X')
+# )
+# 
+# mod_output = get_cis(betaTilde_boot,
+#         betaHat,
+#         smooth_for_ci = TRUE,
+#         smooth_for_variance = FALSE, # False
+#         L = L)
+# 
+# results = get_coverage_stats(mod_output,
+#                              beta_true = t(results.lr |> select(-Variable))[,1:L],
+#                              name = 'Preston',
+#                              # boot_type
+#                              L = L)
+# 
+# write_rds(betaHat, 'tmp_result/betaHat_NI_noOrigial_survey_betaHat.rds')
+# write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_noOrigial_survey_betaTilde_boot.rds')
+# write_rds(mod_output, 'tmp_result/betaHat_NI_noOrigial_survey_mod_output.rds')
 ```
 
 
@@ -353,30 +353,30 @@ df |>
 
 #### Visualize 95%CI
 ```{r}
-betaTilde_boot = run_boots(
-  sim.data,
-  boot_type = 'Preston',
-  betaHat = betaHat,
-  L = L,
-  num_boots = 300,
-  model_formula = as.formula('Y~X')
-)
-
-mod_output = get_cis(betaTilde_boot,
-        betaHat,
-        smooth_for_ci = TRUE,
-        smooth_for_variance = FALSE, # False
-        L = L)
-
-results = get_coverage_stats(mod_output,
-                             beta_true = t(results.lr |> select(-Variable))[,1:L],
-                             name = 'Preston',
-                             # boot_type
-                             L = L)
-
-write_rds(betaHat, 'tmp_result/betaHat_NI_noOrigial_NOsurvey_betaHat.rds')
-write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_noOrigial_NOsurvey_betaTilde_boot.rds')
-write_rds(mod_output, 'tmp_result/betaHat_NI_noOrigial_NOsurvey_mod_output.rds')
+# betaTilde_boot = run_boots(
+#   sim.data,
+#   boot_type = 'Preston',
+#   betaHat = betaHat,
+#   L = L,
+#   num_boots = 300,
+#   model_formula = as.formula('Y~X')
+# )
+# 
+# mod_output = get_cis(betaTilde_boot,
+#         betaHat,
+#         smooth_for_ci = TRUE,
+#         smooth_for_variance = FALSE, # False
+#         L = L)
+# 
+# results = get_coverage_stats(mod_output,
+#                              beta_true = t(results.lr |> select(-Variable))[,1:L],
+#                              name = 'Preston',
+#                              # boot_type
+#                              L = L)
+# 
+# write_rds(betaHat, 'tmp_result/betaHat_NI_noOrigial_NOsurvey_betaHat.rds')
+# write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_noOrigial_NOsurvey_betaTilde_boot.rds')
+# write_rds(mod_output, 'tmp_result/betaHat_NI_noOrigial_NOsurvey_mod_output.rds')
 ```
 
 
@@ -469,117 +469,115 @@ df |>
 
 #### Visualize 95%CI
 ```{r}
-betaTilde_boot = run_boots(
-  sim.data,
-  boot_type = 'Preston',
-  betaHat = betaHat,
-  L = L,
-  num_boots = 300,
-  model_formula = as.formula('Y~X')
-)
-
-mod_output = get_cis(betaTilde_boot,
-        betaHat,
-        smooth_for_ci = TRUE,
-        smooth_for_variance = FALSE, # False
-        L = L)
-
-results = get_coverage_stats(mod_output,
-                             beta_true = t(results.lr |> select(-Variable))[,1:L],
-                             name = 'Preston',
-                             # boot_type
-                             L = L)
-
-results
-
-write_rds(betaHat, 'tmp_result/betaHat_NI_oW_survey_betaHat.rds')
-write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_oW_survey_betaTilde_boot.rds')
-write_rds(mod_output, 'tmp_result/betaHat_NI_oW_survey_mod_output.rds')
+# betaTilde_boot = run_boots(
+#   sim.data,
+#   boot_type = 'Preston',
+#   betaHat = betaHat,
+#   L = L,
+#   num_boots = 300,
+#   model_formula = as.formula('Y~X')
+# )
+# 
+# mod_output = get_cis(betaTilde_boot,
+#         betaHat,
+#         smooth_for_ci = TRUE,
+#         smooth_for_variance = FALSE, # False
+#         L = L)
+# 
+# results = get_coverage_stats(mod_output,
+#                              beta_true = t(results.lr |> select(-Variable))[,1:L],
+#                              name = 'Preston',
+#                              # boot_type
+#                              L = L)
+# 
+# write_rds(betaHat, 'tmp_result/betaHat_NI_oW_survey_betaHat.rds')
+# write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_oW_survey_betaTilde_boot.rds')
+# write_rds(mod_output, 'tmp_result/betaHat_NI_oW_survey_mod_output.rds')
 ```
 
 #### Simulation multiple times
 ```{r}
-nsim = 50
-parallel = TRUE
-ncores = parallelly::availableCores() - 1
-L = 150
-B = 300
-family = "gaussian"
-# boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
-# fit_types = c('design', 'design', 'design', 'weighted', 'none')
-
-boot_types = c('Preston', 'weighed', 'none')
-fit_types = c('design', 'weighted', 'none')
-
-sim_res <- list() ## store simulation results
-for (iter in 1:nsim) {
-  set.seed(iter)
-  x = try({
-    data <- simulate_nhanes_survey_fosr_w(X_des, Y_obs, L = L, sampled_strata = 15)
-    
-    betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = family)
-    betaHat = map(.x = betaTilde, get_betahat, L = L)
-    if (parallel) {
-      plan(multisession, workers = ncores)
-      res = future_map2(
-        .x = boot_types,
-        .y = betaHat,
-        .f = run_boots,
-        data = data,
-        # family = family,
-        num_boots = B,
-        set_seed = TRUE,
-        seed = 2025,
-        L = L,
-        .options = furrr_options(seed = TRUE)
-      )
-      cis = future_map2(
-        .x = res,
-        .y = betaHat,
-        .f = get_cis,
-        L = L,
-        smooth_for_ci = FALSE,
-        .options = furrr_options(seed = TRUE)
-      )
-      plan(sequential)
-    } else{
-      res = map2(
-        .x = boot_types,
-        .y = betaHat,
-        .f = run_boots,
-        data = data,
-        # family = family,
-        num_boots = B,
-        set_seed = TRUE,
-        seed = 2025,
-        L = L)
-      cis = map2(
-        .x = res,
-        .y = betaHat,
-        .f = get_cis,
-        smooth_for_ci = TRUE)
-    }
-    stats = map2(
-      .x = cis,
-      .y = boot_types,
-      .f = get_coverage_stats,
-      L = L,
-      beta_true = t(results.lr |> select(-Variable))[,1:L]
-    ) %>%
-      list_rbind() %>%
-      mutate(n = nrow(data), n_boot = B)
-    sim_res[[iter]] <- stats
-  })
-  rm(x)
-  print(iter)
-}
-
-result =
-  sim_res %>%
-  keep(., is.data.frame) %>%
-  list_rbind(names_to = "id")
-
-write_rds(result, 'tmp_result/betaHat_NI_oW_survey_results.rds')
+# nsim = 50
+# parallel = TRUE
+# ncores = parallelly::availableCores() - 1
+# L = 150
+# B = 300
+# family = "gaussian"
+# # boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'Preston', 'weighted', 'none')
+# # fit_types = c('design', 'design', 'design', 'weighted', 'none')
+# 
+# boot_types = c('Preston', 'weighed', 'none')
+# fit_types = c('design', 'weighted', 'none')
+# 
+# sim_res <- list() ## store simulation results
+# for (iter in 1:nsim) {
+#   set.seed(iter)
+#   x = try({
+#     data <- simulate_nhanes_survey_fosr_w(X_des, Y_obs, L = L, sampled_strata = 15)
+#     
+#     betaTilde = map(.x = fit_types, .f = get_betatilde, data = data, family = family)
+#     betaHat = map(.x = betaTilde, get_betahat, L = L)
+#     if (parallel) {
+#       plan(multisession, workers = ncores)
+#       res = future_map2(
+#         .x = boot_types,
+#         .y = betaHat,
+#         .f = run_boots,
+#         data = data,
+#         # family = family,
+#         num_boots = B,
+#         set_seed = TRUE,
+#         seed = 2025,
+#         L = L,
+#         .options = furrr_options(seed = TRUE)
+#       )
+#       cis = future_map2(
+#         .x = res,
+#         .y = betaHat,
+#         .f = get_cis,
+#         L = L,
+#         smooth_for_ci = FALSE,
+#         .options = furrr_options(seed = TRUE)
+#       )
+#       plan(sequential)
+#     } else{
+#       res = map2(
+#         .x = boot_types,
+#         .y = betaHat,
+#         .f = run_boots,
+#         data = data,
+#         # family = family,
+#         num_boots = B,
+#         set_seed = TRUE,
+#         seed = 2025,
+#         L = L)
+#       cis = map2(
+#         .x = res,
+#         .y = betaHat,
+#         .f = get_cis,
+#         smooth_for_ci = TRUE)
+#     }
+#     stats = map2(
+#       .x = cis,
+#       .y = boot_types,
+#       .f = get_coverage_stats,
+#       L = L,
+#       beta_true = t(results.lr |> select(-Variable))[,1:L]
+#     ) %>%
+#       list_rbind() %>%
+#       mutate(n = nrow(data), n_boot = B)
+#     sim_res[[iter]] <- stats
+#   })
+#   rm(x)
+#   print(iter)
+# }
+# 
+# result =
+#   sim_res %>%
+#   keep(., is.data.frame) %>%
+#   list_rbind(names_to = "id")
+# 
+# write_rds(result, 'tmp_result/betaHat_NI_oW_survey_results.rds')
 ```
 
 
@@ -623,29 +621,29 @@ df |>
 
 #### Visualize 95%CI
 ```{r}
-betaTilde_boot = run_boots(
-  sim.data,
-  boot_type = 'Preston',
-  betaHat = betaHat,
-  L = L,
-  num_boots = 300,
-  model_formula = as.formula('Y~X')
-)
-
-mod_output = get_cis(betaTilde_boot,
-        betaHat,
-        smooth_for_ci = TRUE,
-        smooth_for_variance = FALSE, # False
-        L = L)
-
-results = get_coverage_stats(mod_output,
-                             beta_true = t(results.lr |> select(-Variable))[,1:L],
-                             name = 'Preston', # boot_type
-                             L = L)
-
-write_rds(betaHat, 'tmp_result/betaHat_NI_oW_NOsurvey_betaHat.rds')
-write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_oW_NOsurvey_betaTilde_boot.rds')
-write_rds(mod_output, 'tmp_result/betaHat_NI_oW_NOsurvey_mod_output.rds')
+# betaTilde_boot = run_boots(
+#   sim.data,
+#   boot_type = 'Preston',
+#   betaHat = betaHat,
+#   L = L,
+#   num_boots = 300,
+#   model_formula = as.formula('Y~X')
+# )
+# 
+# mod_output = get_cis(betaTilde_boot,
+#         betaHat,
+#         smooth_for_ci = TRUE,
+#         smooth_for_variance = FALSE, # False
+#         L = L)
+# 
+# results = get_coverage_stats(mod_output,
+#                              beta_true = t(results.lr |> select(-Variable))[,1:L],
+#                              name = 'Preston', # boot_type
+#                              L = L)
+# 
+# write_rds(betaHat, 'tmp_result/betaHat_NI_oW_NOsurvey_betaHat.rds')
+# write_rds(betaTilde_boot, 'tmp_result/betaHat_NI_oW_NOsurvey_betaTilde_boot.rds')
+# write_rds(mod_output, 'tmp_result/betaHat_NI_oW_NOsurvey_mod_output.rds')
 ```
 
 ### Simulation results (N=200) 
@@ -692,246 +690,4 @@ all_results |>
   filter(var == 'Beta') |>
   filter(boot_type == 'Preston') |>
   filter(cover_joint == FALSE)
-```
-
-### [DROP] Consider orginal strata and weights
-```{r}
-X_des = cbind(intercept = 0, nhanes_df |> select(Age, weight))
-num_strata = length(unique(nhanes_df$strata)) # total strata
-L = 1440 # dimension of the functional domain
-sampled_strata = 15
-strata_in_nhanes = unique(nhanes_df$strata)
-I_n = nrow(X_des)
-
-## First stage: Select strata
-dirichlet_probs = gtools::rdirichlet(1, rep(1, num_strata))
-if(sampled_strata == num_strata) {
-  selected_strata = strata_in_nhanes
-} else {
-  selected_strata = sample(
-    strata_in_nhanes,
-    size = sampled_strata,
-    replace = FALSE,
-    prob = dirichlet_probs
-  ) %>% sort
-}
-p_strata_design <- as.vector(dirichlet_probs)
-
-# For strata that were not selected, set their probability to zero.
-p_strata_design[!(strata_in_nhanes %in% selected_strata)] <- 0
-# Renormalize so that the selected strata probabilities sum to 1.
-p_strata_design <- p_strata_design / sum(p_strata_design)
-  # strata_in_nhanes
-
-## Second-stage: Individual Sampling within each strata
-final_sample_id <- c()
-p_i_given_strata <- rep(NA, I) # probabilities of selecting each individual within strata
-p_i_strata <- rep(NA, I)
-X_des[,2] = scale(X_des[,2])
-
-for (strata in selected_strata) {
-  # subjects in the specified strata
-  inds <- which(nhanes_df$strata == strata)
-  
-  # Calculate inclusion probs
-  inclusion_probs <- exp( (X_des[inds, 3] + X_des[inds, 2]) / 4)
-    # Compute individual inclusion probabilities based on Age, dividing by 2 to reduce skewness
-  inclusion_probs <- inclusion_probs / sum(inclusion_probs)
-    # normalize
-  inclusion_probs <- inclusion_probs * I_n * 2
-    # Scale to get the desired number of individuals in ech strata / PSU combo
-  
-  inclusion_probs[inclusion_probs > 1] <- 1
-  p_i_given_strata[inds] <- inclusion_probs
-  
-  # sample individuals based on inclusion probabilities
-  sampled_in_strata <- inds[rbinom(length(inds), 1, inclusion_probs) == 1]
-  final_sample_id <- c(final_sample_id, sampled_in_strata) # add indices to final sample
-}
-
-nhanes_df[final_sample_id,]
-
-## Generate new weights from selection probs
-strata_p_df = cbind(strata = strata_in_nhanes,
-                    p_strata = p_strata_design)
-
-df_add_w = cbind(nhanes_df, p_i_given_strata = p_i_given_strata) |>
-  merge(strata_p_df, by = 'strata') |>
-  mutate(weight_new = p_i_given_strata * p_strata)
-```
-
-```{r}
-var_name = c('Intercept', 'Beta')
-L = 1440
-dat = read_rds('results/NI/NI_noOrigial_visual_only3_verify_raw.rds')
-get_cis(betaTilde_boot = dat$res[[1]], 
-        betaHat = dat$betaHat, 
-        L=1440)
-
-nknots_min = NULL
-nknots_min_cov = 35
-argvals = 1:L
-B = ncol(betaTilde_boot[1, , ])
-nknots <- min(round(L / 2), nknots_min)
-nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
-nknots_fpca <- min(round(L / 2), 35)
-betaHat_boot <- array(NA, dim = c(nrow(betaHat), 
-                                  ncol(betaHat), 
-                                  ncol(betaTilde_boot[1, , ])))
-betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
-  # smooth
-
-for (b in 1:B) {
-  betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
-    gam(x ~ s(
-      argvals, bs = "tp", k = (nknots + 1)
-    ), method = "GCV.Cp")$fitted.values))
-} # smooth each bootstrapped estimate (functional domain)
-  
-  
-for (r in 1:nrow(betaHat)) {
-  if (smooth_for_variance) {
-    betaHat.var[, , r] <- 1.2 * var(t(betaHat_boot[r, , ]))
-  } else{
-    betaHat.var[, , r] <- 1.2 * var(t(betaTilde_boot[r, , ]))
-  }
-}
-N <- 10000
-qn <- rep(0, length = nrow(betaHat))
-set.seed(456)
-for (i in 1:length(qn)) {
-  if (smooth_for_ci) {
-    est_bs <- t(betaHat_boot[i, , ])
-  } else{
-    est_bs <- t(betaTilde_boot[i, , ])
-  }
-  fit_fpca <- suppressWarnings(refund::fpca.face(est_bs, knots = nknots_fpca)) # suppress sqrt(Eigen$values) NaNs
-  ## extract estimated eigenfunctions/eigenvalues
-  phi <- fit_fpca$efunctions
-  lambda <- fit_fpca$evalues
-  K <- length(fit_fpca$evalues)
-  
-  ## simulate random coefficients
-  theta <- matrix(stats::rnorm(N * K), nrow = N, ncol = K) # generate independent standard normals
-  if (K == 1) {
-    theta <- theta * sqrt(lambda) # scale to have appropriate variance
-    X_new <- tcrossprod(theta, phi) # simulate new functions
-  } else{
-    theta <- theta %*% diag(sqrt(lambda)) # scale to have appropriate variance
-    X_new <- tcrossprod(theta, phi) # simulate new functions
-  }
-  x_sample <- X_new + t(fit_fpca$mu %o% rep(1, N)) # add back in the mean function
-  Sigma_sd <- Rfast::colVars(x_sample, std = TRUE, na.rm = FALSE) # standard deviation: apply(x_sample, 2, sd)
-  x_mean <- colMeans(est_bs)
-  un <- rep(NA, N)
-  for (j in 1:N) {
-    un[j] <- max(abs((x_sample[j, ] - x_mean) / Sigma_sd))
-  }
-  qn[i] <- stats::quantile(un, 0.95)
-}
-
-  return(list(
-    betaHat = betaHat,
-    betaHat.var = betaHat.var,
-    qn = qn
-  ))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-results.lr = read_rds('data/nhanes_true_effect_lr.rds')
-mod_output = dat[[1]]
-beta_true = t(results.lr |> select(-Variable))[, 1:L]
-cover_joint <- logical(nrow(beta_true))  # Using logical instead of NA-filled vector
-
-source('src/00_sim_data_function.R')
-source('src/01_sim_functions.R')
-
-sqrt_diag_var <- apply(mod_output$betaHat.var, 3, function(mat) sqrt(diag(mat)))
-
-results = data.frame()
-for (p in 1:length(var_name)){
-  # Extract beta and SE estimate
-  true <- beta_true[p,]
-  sqrt_diag_p <- sqrt_diag_var[, p]  # Extract precomputed diagonal elements
-  
-  # Compute upper and lower bounds in one step
-  ## joint-wise
-  margin <- mod_output$qn[p] * sqrt_diag_p #joint
-  upper <- mod_output$betaHat[p,] + margin
-  lower <- mod_output$betaHat[p,] - margin
-  
-  ## point-wise
-  margin_pw <- 1.96 * sqrt_diag_p
-  upper_pw <- mod_output$betaHat[p,] + margin_pw
-  lower_pw <- mod_output$betaHat[p,] - margin_pw
-  
-  # return data for plots
-  tmp = data.frame(type = var_name[p],
-             beta_estimate = mod_output$betaHat[p,],
-             beta_true = true,
-             beta_pw_lower = lower_pw,
-             beta_pw_upper = upper_pw,
-             beta_jw_lower = lower,
-             beta_jw_upper = upper)
-  
-  results = rbind(results, tmp)
-}
-
-get_coverage_stats(mod_output, beta_true, L = 1440, name = 'Preston')
-
-a = results |>
-  mutate(x = rep(seq(1:L), 2)) |>
-  ggplot(aes(x = x)) +
-  
-  ## joint-wise CI
-  geom_ribbon(aes(ymin = beta_pw_lower, ymax = beta_pw_upper), fill = "blue", alpha = 0.3) +
-  ## point-wise CI
-  geom_ribbon(aes(ymin = beta_jw_lower, ymax = beta_jw_upper), fill = "red", alpha = 0.3) +
-  ## true values
-  geom_line(aes(y = beta_true, color = "True value"), size = 0.5) +
-  ## estimated values
-  geom_line(aes(y = beta_estimate, color = "Estimated value"), size = 0.5) +
-  
-  ## Add non-covered points
-  geom_point(data = results |> 
-               mutate(x = rep(seq(1:L), 2)) |> 
-               mutate(cover_jw = ifelse(beta_true >= beta_jw_lower & beta_true <= beta_jw_upper, 1, 0)) |> 
-               filter(cover_jw == 0),
-             aes(x = x, y = beta_true), 
-             shape = 1, size = 2, color = "green") +
-  facet_wrap(~type, scales = "free_y") + 
-  labs(x = "X", y = "Y", title = "True vs Estimated with Confidence Intervals", color = "Line Type") +
-  
-  scale_color_manual(values = c("True value" = "black", "Estimated value" = "blue"))
-
-a
-
-## too smooth, add knots?
-
-```
-
-
-# 02. Informative Sampling
-
-```{r}
-nhanes_df |> filter(strata == 91)
 ```

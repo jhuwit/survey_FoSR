@@ -288,7 +288,7 @@ results.lr.smoothed.bspline.n10 = results.lr |>
 
 ```{r}
 ## example A: default setting
-exampleA_summary = visualize_from_folder(folder = 'results/NI/',
+exampleA_summary = visualize_from_folder(folder = 'results/NI/sim_noOrigial_survey_L150/',
                                          file_pattern = "sim_noOrigial_survey_L150_.*\\.rds",
                                          L = 150)
 
@@ -359,9 +359,9 @@ case13_summary = visualize_from_folder(folder = 'results/NI/case13_L1440///',
                                        L = 1440)
 
 ## case 14: smooth for variance, but not smooth for CI, but increase knot number
-case14_summary = visualize_from_folder(folder = 'results/NI/case14_L1440///',
-                                       file_pattern = '',
-                                       L = 1440)
+# case14_summary = visualize_from_folder(folder = 'results/NI/case14_L1440///',
+#                                        file_pattern = '',
+#                                        L = 1440)
 
 ## case 15: smooth for variance, but not smooth for CI
 ## change smooth functions for true estimates, beta_hat and variance (smoother?)
