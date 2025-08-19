@@ -1,0 +1,632 @@
+---
+title: "empirical_0417"
+format: 
+  html:
+    code-fold: true
+    self-contained: true
+execute:
+  warning: false
+  echo: true
+---
+
+# Prepare package, data and functions
+
+```{r}
+library(dplyr)
+library(readxl)
+library(readr)
+library(knitr)
+library(haven)
+library(visdat)
+library(sjstats)
+library(openxlsx)
+library(stargazer)
+library(broom)
+library(ggplot2)
+library(sjPlot)
+library(stringr)
+library(caret)
+library(future)
+library(purrr)
+library(furrr)
+library(here)
+library(svrep)
+library(patchwork)
+
+
+######## Load Functions ########
+source("src/00_sim_data_function.R")
+source("src/01_sim_functions.R")
+source("src/revised_func.R")
+print('Functions have been loaded')
+set.seed(1234)
+
+results.lr = read_rds('data/nhanes_true_effect_lr.rds') # true coefficients
+```
+
+# True Population Effects
+
+## Estimated effects from LR
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+results.lr = read_rds('data/nhanes_true_effect_lr.rds')
+
+## True Coefficients and intercept (& Visualization)
+results.lr |>
+  mutate(Minutes = as.numeric(sub('min_', '', Variable)) ) |>
+  select(-Variable) |>
+  tidyr::pivot_longer(cols = c(Beta, Intercept), 
+                      names_to = "Type",
+                      values_to = "Value") |>
+  ggplot(aes(x = Minutes, y = Value)) +
+  geom_point(color = "blue",
+             alpha = 0.6, size = 0.8) +       # 绘制数据点
+  geom_smooth(method = "loess",
+              linewidth = 0.8, 
+              color = "red", se = TRUE, span = 0.3) +
+  facet_wrap(~ Type, scales = "free_y") + 
+  labs(title = "True effects of beta and intercept throughout the day",
+       x = "Minutes",
+       y = "Beta") +
+  theme(text = element_text(size = 14))
+```
+
+# Model Performance
+
+## Sample without NHANES design
+
+### Visiualization (randome sample)
+
+```{r, fig.width = 8, fig.height = 12}
+var_name = c('Intercept', 'Beta')
+L = 1440
+testL = 1:1440
+dat = read_rds('results/NI/NI_noOrigial_visual_only3.rds')
+
+plot = list()
+plot[['Preston']] = visualize_notCover(
+  beta_true = t(results.lr |> select(-Variable))[, testL],
+  mod_output = dat[[1]],
+  L_domain = testL,
+  subtitle = 'svylm & preston'
+)
+plot[['Weight']] = visualize_notCover(
+  beta_true = t(results.lr |> select(-Variable))[, testL],
+  mod_output = dat[[2]],
+  L_domain = testL,
+  subtitle = 'svylm & weight'
+)
+plot[['None']] = visualize_notCover(
+  beta_true = t(results.lr |> select(-Variable))[, testL],
+  mod_output = dat[[3]],
+  L_domain = testL,
+  subtitle = 'lm & lm CI%'
+)
+
+wrap_plots(plot, nrow = 3, ncol = 1) +
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom")
+```
+
+Green circle represents the point which is not covered by joint-wise bands.
+
+### Simulation Results
+
+#### Base results
+
+L = 1440\
+Considered method: Preston, weight, none\
+Simulation number: 200\
+Bootstrap number for joint-CI: 100
+
+```{r}
+L = 1440
+all_results <- list.files("results/NI/", 
+                          pattern = "sim_noOrigial_survey_[0-9]+.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / L,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4))) 
+
+kable(summary_design,
+      digits = 4,  # control digital number 
+      caption = "Summary Statistics",  # Simple Caption
+      format = "html")
+```
+
+1.  The width of joint-wise (jw) SE is 3-4 times than the point-wise (pw) SE.
+2.  The Preston bootstrap provide great pw-coverage ratio, while 'weighted' and 'none' method provide worse ratio.
+3.  Strangely, the coverage ratio of pw is much lower than expected.
+
+#### Visualize the trajectory (not covered by jw-band)
+
+```{r, fig.width = 9, fig.height = 5}
+visualize_notCover(
+  beta_true = t(results.lr |> select(-Variable))[, testL],
+  mod_output = dat[[1]],
+  L_domain = testL,
+  subtitle = 'svylm & preston'
+)
+```
+
+It seems only several concentrated points are not covered. And from the plot, we can see the place where green circles located is very special. Specifically, the trajectory changed abruptly and smooth. Also, the point estimates is little away from the true effects.
+
+Several considerations: 1. Bootstrap number for the jw-CI is too small. 2. The length of functional domain is too long compared to the current parameter setting.
+
+```{r}
+out = get_coverage_stats(dat[[1]],
+                   name = 'Preston',
+                   beta_true = t(results.lr |> select(-Variable))[, testL],
+                   L = length(testL))
+
+kable(out,
+      digits = 4,  # control digital number 
+      caption = "Summary Statistics",  # Simple Caption
+      format = "html")
+```
+
+```{r, fig.width = 9, fig.height = 5}
+visualize_notCover(
+  beta_true = t(results.lr |> select(-Variable))[, testL],
+  mod_output = dat[[1]],
+  L_domain = testL,
+  uncovered_pw = TRUE,
+  subtitle = 'svylm & preston'
+)
+```
+
+#### **Change Bootstrap Number**
+
+L = 1440\
+Considered method: Preston, weight, none\
+Simulation number: 200
+
+##### Bootstrap number = 300
+
+Bootstrap number for joint-CI: 300
+
+```{r}
+all_results <- list.files("results/NI/", 
+                          pattern = "sim_noOrigial_survey_b300_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / 1440,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  # control digital number 
+      caption = "Summary Statistics",  # Simple Caption
+      format = "html")
+```
+
+##### Bootstrap number = 500
+
+Bootstrap number for joint-CI: 500 \* about 60 simulation rounds are still ongoing.
+
+```{r}
+all_results <- list.files("results/NI/", 
+                          pattern = "sim_noOrigial_survey_b500_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / 1440,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  # control digital number 
+      caption = "Summary Statistics",  # Simple Caption
+      format = "html")
+```
+
+The jw-CI coverage ratio and width of jw-SE doesn't change a lot when the bootstrap number increases from 100 to 500. Thus, the bootstrap number may have small effects on the jw-band. Then, whether the coverage ratio changed as the length of function domain increases.
+
+#### **Change length of function domain**
+
+Considered method: Preston, weight, none\
+Simulation number: 200 Bootstrap number for joint-CI: 100
+
+##### L = 150
+
+```{r}
+L = 150
+all_results <- list.files("results/NI/", 
+                          pattern = "sim_noOrigial_survey_L150_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / L,
+    .groups = 'drop'
+)
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  # control digital number 
+      caption = "Summary Statistics",  # Simple Caption
+      format = "html")
+```
+
+##### L = 500
+
+```{r}
+L = 500
+all_results <- list.files("results/NI/", 
+                          pattern = "sim_noOrigial_survey_L500_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / L,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  # control digital number 
+      caption = "Summary Statistics",  # Simple Caption
+      format = "html")
+```
+
+Interestingly, the jw-coverage raio decrease as the length of function domain increases. When n=150, the jw-coverage ratio is about 0.9 (take beta as the example), similar to the last week's test finding (bootstrap num=300, simulation_time=50, jw-coverage ratio=0.94). However, as n increases to 500, the ratio decreases to 0.770.
+
+##### FUI's simulation results (Eijia, 2022)
+
+![](figures/FUI_simulation.png)
+
+Interestingly, we can see the coverage ratio also declines in Eijia's FUI paper as the domain number increases. But the number is limited to 200 here, not sure whether it also keeps as the number continuously increase.
+
+Have a concer here. When estimating the joint confidence interval band for a trajectory over a domain of length 1440, I noticed that there is a region where the points are not covered by the band. If we shorten the functional domain and calculate the joint confidence intervals separately at different locations, would that result in a higher coverage rate, or would it remain roughly the same?
+
+##### L=180 but in one trajectory
+
+```{r, fig.width = 12, fig.height = 12}
+var_name = c('Intercept', 'Beta')
+L = 1440
+dat = read_rds('results/NI/NI_noOrigial_visual_only3_verify_raw.rds')
+betaTilde_boot = dat$res[[1]]
+betaHat = dat$betaHat[[1]]
+
+L = 1440
+group_size = 180
+values <- 1:L
+groups <- rep(1:ceiling(L / group_size), each = group_size)[1:L]
+L_list <- split(values, groups)
+
+plots = list()
+plots_pw = list()
+for (i in 1:length(L_list)){
+  testL = L_list[[i]]
+  stats = get_cis(betaTilde_boot = betaTilde_boot[,testL,],
+                  betaHat = betaHat[,testL],
+                  L=length(testL),
+                  smooth_for_variance = TRUE,
+                  smooth_for_ci = FALSE,
+                  nknots_min = NULL,
+                  nknots_min_cov = 35)
+  
+  plot = visualize_notCover(beta_true = t(results.lr |> select(-Variable))[, testL],
+                     mod_output = stats,
+                     L_domain = testL)
+  
+  plot_pw = visualize_notCover(beta_true = t(results.lr |> select(-Variable))[, testL],
+                     mod_output = stats,
+                     uncovered_pw = TRUE,
+                     L_domain = testL)
+  
+  plots[[i]] = plot
+  plots_pw[[i]] = plot_pw
+}
+
+combined_plot <- wrap_plots(plots, nrow = 3, ncol = 3) +
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom")
+
+print(combined_plot)
+```
+
+```{r}
+# combined_plot <- wrap_plots(plots_pw, nrow = 3, ncol = 3) +
+#   plot_layout(guides = "collect") & 
+#   theme(legend.position = "bottom")
+# 
+# print(combined_plot)
+```
+
+Interestingly, similar to estimating jw-band across functional domains, the figure only show uncovered point around 1330 minutes. However, the number of uncovered points decreased (for beta, from 5 to 1; for intercept, from 1 to 0). Thus, the length of domain may affect the accuracy of estimated jw bands.
+
+That's to say, we may need adjust current procedures to better consider the much longer functional domain.
+
+Some potential adjusted procedures / thoughts: 1. scaling factor (1.2); dynamic one? e.g. 1+0.2\*log(L/50); no direct evidence to support. - Try impirical one
+
+2.  The estimated trajectory is too smooth compared to the original one? Increase knots when smoothing individual bootstrapped trajectory or estimating covariance matrix.
+
+3.  sample points every 10 minutes and then run the empirical simulation based on these sparser point
+
+4.  change selected sample?
+
+## Change knot numbers
+
+```{r}
+dat = read_rds('results/NI/NI_noOrigial_visual_only3_verify_raw.rds')
+betaTilde_boot = dat$res[[1]]
+betaHat = dat$betaHat[[1]]
+```
+
+### Visualization
+
+#### Original setting
+
+Considered method: svyglm + Preston\
+Simulation number: 200\
+Bootstrap number for joint-CI: 100
+
+**nknots_min = L/2**: smooth each bootstrapped estimates\
+**smooth_for_ci = TRUE**: use smoothed estimates to generate point-wise CI\
+**smooth_for_variance = TRUE**: use smoothed estimates to generate joint-wise CI\
+**nknots_fpca_min = 35**: The knots used for splines in fPCA
+
+```{r}
+testL = 1200:1400
+stats = get_cis(betaTilde_boot = betaTilde_boot[,testL,],
+        betaHat = betaHat[,testL],
+        L=length(testL))
+
+visualize_notCover(beta_true = t(results.lr |> select(-Variable))[, testL],
+                   mod_output = stats,
+                   L_domain = testL)
+```
+
+#### knots = 100 / no smooth
+
+**nknots_min = L/2**\
+**smooth_for_ci = FALSE**\
+**smooth_for_variance = FALSE**\
+**nknots_fpca_min = 100**
+
+```{r}
+stats = get_cis_revise0415(betaTilde_boot = betaTilde_boot[,testL,],
+        betaHat = betaHat[,testL],
+        L=length(testL),
+        smooth_for_variance = FALSE,
+        smooth_for_ci = FALSE,
+        nknots_fpca_min = 100,
+        nknots_min = 100,
+        nknots_min_cov = 100)
+
+visualize_notCover(beta_true = t(results.lr |> select(-Variable))[, testL],
+                   mod_output = stats,
+                   L_domain = testL)
+```
+
+### Increase knots number
+
+Considered method: svyglm + Preston, Rao-Wu-Yue-Beaumont\
+Simulation number: 200\
+Bootstrap number for joint-CI: 100
+
+**nknots_min = L/2\
+smooth_for_ci = TRUE\
+smooth_for_variance = TRUE\
+nknots_fpca_min = L/2 (previous: 35)**
+
+```{r}
+L = 1440
+all_results <- list.files("results/NI/knot/", 
+                          pattern = "sim_noOrigial_survey_Knot_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / L,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  
+      caption = "Summary Statistics",  
+      format = "html")
+```
+
+### not smooth bootstrapped estimates
+
+Considered method: svyglm + Preston, Rao-Wu-Yue-Beaumont\
+Simulation number: 200\
+Bootstrap number for joint-CI: 100
+
+nknots_min = L/2**\
+smooth_for_ci = FALSE**\
+**smooth_for_variance = FALSE\
+**nknots_fpca_min = L/2
+
+```{r}
+L = 1440
+all_results <- list.files("results/NI/knot_0421/", 
+                          pattern = "sim_noOrigial_survey_Knot_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / L,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  
+      caption = "Summary Statistics",  
+      format = "html")
+```
+
+### not smooth bootstrapped estimates+increase knots in fPCA
+
+Considered method: svyglm + Preston, Rao-Wu-Yue-Beaumont\
+Simulation number: 200\
+Bootstrap number for joint-CI: 100
+
+nknots_min = L/2\
+smooth_for_ci = FALSE\
+smooth_for_variance = FALSE**\
+nknots_fpca_min** = **30 + L\*0.75**
+
+```{r}
+L = 1440
+all_results <- list.files("results/NI/knot_0422///", 
+                          pattern = "sim_noOrigial_survey_Knot_0422_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / L,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  
+      caption = "Summary Statistics",  
+      format = "html")
+```
+
+### increase simulation times
+
+Considered method: svyglm + Preston, Rao-Wu-Yue-Beaumont\
+**Simulation number: 400**\
+Bootstrap number for joint-CI: 100
+
+nknots_min = L/2\
+smooth_for_ci = FALSE\
+smooth_for_variance = FALSE**\
+**nknots_fpca_min = 30 + L\*0.75
+
+```{r}
+L = 1440
+all_results <- list.files("results/NI/bootnumup//", 
+                          pattern = "sim_noOrigial_survey_Knot_bootnumup_.*\\.rds", 
+                          full.names = TRUE) %>%
+  map_dfr(readRDS)
+
+summary_design = all_results %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / L,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  
+
+kable(summary_design,
+      digits = 4,  
+      caption = "Summary Statistics",  
+      format = "html")
+```
+
+## 0425 Summary:
+
+**Current issues:**
+
+\(1\) The joint-wise CI coverage ratio lower than expected: 0.91
+
+\(2\) Forget to set 'smooth_for_ci = TRUE' when increasing knots used for smoothing bootstrapped estimates
+
+-   Can't show simulation results with different knots.
+
+**Current findings:**
+
+\(1\) Smoothing bootstrapped estimates or not would not affect point-wise coverage ratio
+
+\(2\) increase 'nknots_fpca_min' would improve jw-coverage ratio, but it has no effects after reaching certain values (e.g., 1100; ratio=0.91)
+
+\(3\) Use raw bootstrapped estimates would improve jw-coverage ratio compared to current 'nknots_min = 720'. But it would make bands rough and irregular.
+
+\(4\) Increase Bootstrap and simulation number would not affect jw-coverage ratio much
+
+**Next steps:**
+
+\(1\) Exploring whether the combination between 'smooth_for_ci = TRUE' and increasing 'nknots_min = 720' would improve coverage ratio and confidence band.
+
+\(2\) Explore empirical scaling factor.
+
+### 

@@ -1,0 +1,360 @@
+---
+title: "Emprical Simulation"
+format: 
+  html:
+    code-fold: true
+execute:
+  warning: false
+  echo: true
+bibliography: references.bib
+---
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+library(dplyr)
+library(readxl)
+library(readr)
+library(knitr)
+library(haven)
+library(visdat)
+library(sjstats)
+library(openxlsx)
+library(stargazer)
+library(broom)
+library(ggplot2)
+library(sjPlot)
+library(stringr)
+library(caret)
+library(future)
+library(purrr)
+library(furrr)
+library(here)
+library(svrep)
+library(patchwork)
+```
+
+------------------------------------------------------------------------
+
+# Estimate True Population Effect
+
+## Select population samples
+
+Now, we didn't set any selection criteria (like Age and Sex)
+
+## Estimate True Population Effect
+
+$$
+y_i(s) = \beta_0(s) + X_i \beta_1(s) + \epsilon_i(s), \quad s = 1, 2, \ldots, 1440
+$$
+
+-   $y_i(s)$: Physical activity monitoring data for individual i
+
+-   $X_i$: Scalar covariate, and we consider **age** here
+
+-   $\beta_0(s)$: Time-varying regression coefficients
+
+-   $\epsilon_i(s) \sim N(0, \sigma^2(s))$
+
+We need to find a way to estimate the true coefficients, $\beta_{1(s)}$ and intercepts $\beta_{0(s)}$. For this purpose, we apply the same approach used in fast univariate inference (FUI) to estimate point-wise effects. Specifically, we employ linear regression / generalized survey-weighted linear mixed effects models at each time point across the functional domain.
+
+Currently, we view the NHANES data as the super-population, so we could ignore the original survey design or consider partial design component in the process of selecting subsample.
+
+When estimating true effects, we use linear regression (for single level) to estimate true effects of Age and true intercept at each time point throughout the day.
+
+### Linear regression (point-estimate)
+#### Estimate true effects using LR
+```{r}
+## Obtain True Effects: Regression at each time point
+# results.lr <- map_dfr(min_columns, ~ {
+#   model <- lm(reformulate("Age", response = .x), data = nhanes_df)
+#   tidy(model) %>%
+#     filter(term == "Age") %>%
+#     mutate(Variable = .x, Intercept = coef(model)[1], Beta = estimate) %>%
+#     select(Variable, Intercept, Beta)
+# })
+# write_rds(results.lr, 'data/nhanes_true_effect_lr.rds')
+
+
+## Smooth estimated effects
+results.lr = read_rds('data/nhanes_true_effect_lr.rds')
+intercept_smooth <- smooth.spline(results.lr$Intercept)
+beta_smooth <- smooth.spline(results.lr$Beta)
+  # Here, we use GCV to select spar (cubic smoothing spline)
+  # what method we should use for smoothing true estimates?
+results.lr$Intercept_smoothed <- predict(intercept_smooth)$y
+results.lr$Beta_smoothed <- predict(beta_smooth)$y
+
+
+## Export smoothed estimates
+results.lr = results.lr |>
+  select(-Intercept, -Beta) |>
+  rename(Intercept = Intercept_smoothed,
+         Beta = Beta_smoothed)
+# write_rds(results.lr, 'data/nhanes_true_effect_lr_smoothed.rds')
+```
+
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+results.lr = read_rds('data/nhanes_true_effect_lr_smoothed.rds')
+
+## True Coefficients and intercept (& Visualization)
+results.lr |>
+  mutate(Minutes = as.numeric(sub('min_', '', Variable)) ) |>
+  select(-Variable) |>
+  tidyr::pivot_longer(cols = c(Beta, Intercept), 
+                      names_to = "Type",
+                      values_to = "Value") |>
+  ggplot(aes(x = Minutes, y = Value)) +
+  geom_point(color = "blue",
+             alpha = 0.6, size = 0.8) +       # 绘制数据点
+  geom_smooth(method = "loess",
+              linewidth = 0.8, 
+              color = "red", se = TRUE, span = 0.3) +
+  facet_wrap(~ Type, scales = "free_y") + 
+  labs(title = "True effects of beta and intercept throughout the day",
+       x = "Minutes",
+       y = "Beta") +
+  theme(text = element_text(size = 14))
+```
+
+# Model Performance
+
+For the single level, we consider two scenarios (This process is the same as the simulation study):
+
+-   \(1\) non-informative sampling
+
+-   \(2\) informative sampling
+
+For each scenario, we would explore should we consider the original survey design in the subsample selection process. We consider three conditions:
+
+-   \(1\) No original design considered
+
+-   \(2\) Consider original weights
+
+-   \(3\) Consider original strata and weights (TBD).
+
+Finding: Condition (2) outperforms condition (1) in visualization quality, yet both conditions exhibit comparable performance across evaluation metrics.
+
+## 01. Non-Informative Sampling
+
+### Ignore original survey design in the selection process
+
+1.  Generate strata selection probabilities ($H=30$) from Dirichlet distribution
+2.  Sample $N=\{15\}$ strata in the simulation
+3.  For each strata $h$ in the selected strata:
+    -   Standardize Age into mean=0 and SD=1
+    -   Calculate inclusion probabilities $p_i = exp(Age_{i}/2)$
+    -   Normalize: $p_{i'} = \frac{p_i}{\sum_{i \in h}p_i}$
+    -   Adjust by expected number of individuals sampled $p_{i''} = min(p_{i'} * I_n * 2, 1)$
+    -   Obtain sample using binomial sampling
+
+-   Only show first 150 time points here due to running time \[Need update after finish running\]
+
+#### Not consider current design
+```{r}
+results.lr.tmp = read_rds('data/nhanes_true_effect_lr_smoothed.rds') |>
+  mutate(Minutes = as.numeric(sub('min_', '', Variable)) ) |>
+  select(-Variable)
+betaHat = readRDS('tmp_result/betaHat_NI_noOrigial_NOsurvey_betaHat.rds')
+df = as.data.frame(t(betaHat)) |>
+  rename(Beta = X, Intercept = `(Intercept)`) |>
+  mutate(Minutes = row_number() ) |>
+  merge(results.lr.tmp,
+        by = 'Minutes',
+        suffixes = c("_estimate","_lr"))
+
+df |>
+  select(Intercept_estimate, Beta_estimate, Minutes) |>
+  mutate(type = "estimate") |>
+  rename(Intercept = Intercept_estimate, Beta = Beta_estimate) |>
+  bind_rows(
+    df |>
+      select(Intercept_lr, Beta_lr, Minutes) |>
+      mutate(type = "lr") |>
+      rename(Intercept = Intercept_lr, Beta = Beta_lr)
+  ) |>
+  tidyr::pivot_longer(cols = c(Intercept, Beta), 
+                      names_to = "Metric", 
+                      values_to = "Value") |>
+  ggplot(aes(x = Minutes, y = Value, color = type)) +
+  geom_point(alpha = 0.6, size = 0.5) +       # 绘制数据点
+  facet_wrap(~ Metric, scales = "free_y") + 
+  labs(title = "True effects of beta and intercept throught the day",
+       x = "Minutes",
+       y = "Value") +
+  theme(text = element_text(size = 14))
+```
+
+#### Consider current design
+```{r}
+results.lr.tmp = read_rds('data/nhanes_true_effect_lr_smoothed.rds') |>
+  mutate(Minutes = as.numeric(sub('min_', '', Variable)) ) |>
+  select(-Variable)
+betaHat = readRDS('tmp_result/betaHat_NI_noOrigial_survey_betaHat.rds')
+
+df = as.data.frame(t(betaHat)) |>
+  rename(Beta = X, Intercept = `(Intercept)`) |>
+  mutate(Minutes = row_number() ) |>
+  merge(results.lr.tmp,
+        by = 'Minutes',
+        suffixes = c("_estimate","_lr"))
+
+df |>
+  select(Intercept_estimate, Beta_estimate, Minutes) |>
+  mutate(type = "estimate") |>
+  rename(Intercept = Intercept_estimate, Beta = Beta_estimate) |>
+  bind_rows(
+    df |>
+      select(Intercept_lr, Beta_lr, Minutes) |>
+      mutate(type = "lr") |>
+      rename(Intercept = Intercept_lr, Beta = Beta_lr)
+  ) |>
+  tidyr::pivot_longer(cols = c(Intercept, Beta), 
+                      names_to = "Metric", 
+                      values_to = "Value") |>
+  ggplot(aes(x = Minutes, y = Value, color = type)) +
+  geom_point(alpha = 0.6, size = 0.5) +       # 绘制数据点
+  facet_wrap(~ Metric, scales = "free_y") + 
+  labs(title = "True effects of beta and intercept throught the day",
+       x = "Minutes",
+       y = "Value") +
+  theme(text = element_text(size = 14))
+```
+
+#### Simulation (N=50)
+We repeat the subsampling above and model fitting procedure 50 times.
+
+*Summary Table*
+```{r}
+result_design = read_rds('tmp_result/betaHat_NI_noOrigial_survey_results.rds') 
+  # Consider current design
+
+summary_design = result_design %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / 150,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+kable(summary_design,
+      digits = 4,
+      caption = "Summary Statistics", 
+      format = "html")
+```
+
+
+### Consider original weights in the selection process
+It didn't consider PA information here, but it's also a kind of infomrative manner to select subjects. [Q: Do we define it as informative sampling?]
+
+1.  Generate strata selection probabilities ($H=30$) from Dirichlet distribution
+2.  Sample $N=\{15\}$ strata in the simulation
+3.  For each strata $h$ in the selected strata:
+    -   Standardize *Age* and *Weight* into mean=0 and SD=1
+    -   Calculate inclusion probabilities $p_i = exp( (Age_{i}+weight_{i}) /4)$
+    -   Normalize: $p_{i'} = \frac{p_i}{\sum_{i \in h}p_i}$
+    -   Adjust by expected number of individuals sampled $p_{i''} = min(p_{i'} * I_n * 2, 1)$
+    -   Obtain sample using binomial sampling
+    
+#### Not consider current design
+```{r}
+betaHat = readRDS('tmp_result/betaHat_NI_oW_NOsurvey_betaHat.rds')
+df = as.data.frame(t(betaHat)) |>
+  rename(Beta = X, Intercept = `(Intercept)`) |>
+  mutate(Minutes = row_number() ) |>
+  merge(results.lr.tmp,
+        by = 'Minutes',
+        suffixes = c("_estimate","_lr"))
+
+df |>
+  select(Intercept_estimate, Beta_estimate, Minutes) |>
+  mutate(type = "estimate") |>
+  rename(Intercept = Intercept_estimate, Beta = Beta_estimate) |>
+  bind_rows(
+    df |>
+      select(Intercept_lr, Beta_lr, Minutes) |>
+      mutate(type = "lr") |>
+      rename(Intercept = Intercept_lr, Beta = Beta_lr)
+  ) |>
+  tidyr::pivot_longer(cols = c(Intercept, Beta), 
+                      names_to = "Metric", 
+                      values_to = "Value") |>
+  ggplot(aes(x = Minutes, y = Value, color = type)) +
+  geom_point(alpha = 0.6, size = 0.5) +       # 绘制数据点
+  facet_wrap(~ Metric, scales = "free_y") + 
+  labs(title = "True effects of beta and intercept throught the day",
+       x = "Minutes",
+       y = "Value") +
+  theme(text = element_text(size = 14))
+```
+
+
+#### Consider current design
+```{r}
+betaHat = read_rds('tmp_result/betaHat_NI_oW_survey_betaHat.rds')
+df = as.data.frame(t(betaHat)) |>
+  rename(Beta = X, Intercept = `(Intercept)`) |>
+  mutate(Minutes = row_number() ) |>
+  merge(results.lr.tmp,
+        by = 'Minutes',
+        suffixes = c("_estimate","_lr"))
+
+df |>
+  select(Intercept_estimate, Beta_estimate, Minutes) |>
+  mutate(type = "estimate") |>
+  rename(Intercept = Intercept_estimate, Beta = Beta_estimate) |>
+  bind_rows(
+    df |>
+      select(Intercept_lr, Beta_lr, Minutes) |>
+      mutate(type = "lr") |>
+      rename(Intercept = Intercept_lr, Beta = Beta_lr)
+  ) |>
+  tidyr::pivot_longer(cols = c(Intercept, Beta), 
+                      names_to = "Metric", 
+                      values_to = "Value") |>
+  ggplot(aes(x = Minutes, y = Value, color = type)) +
+  geom_point(alpha = 0.6, size = 0.5) +       # 绘制数据点
+  facet_wrap(~ Metric, scales = "free_y") + 
+  labs(title = "True effects of beta and intercept throught the day",
+       x = "Minutes",
+       y = "Value") +
+  theme(text = element_text(size = 14))
+```
+#### Simulation (N=50)
+We repeat the subsampling above and model fitting procedure 50 times.
+
+*Summary Table*
+```{r}
+result_design = read_rds('tmp_result/betaHat_NI_oW_survey_results.rds') 
+result_design_2 = read_rds('tmp_result/betaHat_NI_oW_survey_results_2.rds') 
+
+  # Consider current design
+
+summary_design = rbind(result_design, result_design_2) %>%
+  group_by(boot_type, var) %>%
+  summarise(
+    MISE = mean(MISE),
+    mean_joint_se = mean(mean_joint_se),
+    mean_pw_se = mean(mean_pw_se),
+    cover_joint_ratio = mean(cover_joint),
+    cover_pw_ratio = mean(cover_pw) / 150,
+    .groups = 'drop'
+  )
+
+formatted_table <- summary_design %>%
+  mutate(across(where(is.numeric), ~round(., 4)))  # 四舍五入到4位小数
+
+kable(summary_design,
+      digits = 4,  # 控制小数位数
+      caption = "Summary Statistics",  # 简单标题
+      format = "html")
+```
+
+## 02. Informative Sampling (TBD)
+Consider eigenvalues $\hat\lambda_k$in the selection process
+
