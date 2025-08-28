@@ -90,7 +90,7 @@ if(!file.exists(outfile) || force) {
         psu_assignments = lst$psu_assignments,
         dirichlet_probs = lst$dirichlet_probs,
         seed = iter,
-        inf_level = temp$inf_level * 2,
+        inf_level = temp$inf_level * 3,
         compression = 2,
       )
       print(summary(data$weight))
