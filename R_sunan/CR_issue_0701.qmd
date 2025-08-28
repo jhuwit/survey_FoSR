@@ -1,0 +1,512 @@
+---
+title: "CR_issue_0701"
+format: 
+  html:
+    code-fold: true
+    self-contained: true
+execute:
+  warning: false
+  echo: true
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Prepare package, data and functions
+
+```{r}
+library(dplyr)
+library(readxl)
+library(readr)
+library(knitr)
+library(haven)
+library(visdat)
+library(sjstats)
+library(openxlsx)
+library(stargazer)
+library(broom)
+library(ggplot2)
+library(sjPlot)
+library(stringr)
+library(fda)
+library(caret)
+library(future)
+library(purrr)
+library(furrr)
+library(here)
+library(svrep)
+library(patchwork)
+
+
+######## Load Functions ########
+source("src/00_sim_data_function.R")
+source("src/01_sim_functions.R")
+source("src/revised_func.R")
+source('src/99_visualization_func.R')
+print('Functions have been loaded')
+```
+
+## NHANES
+
+```{r}
+
+```
+
+## NHATS
+
+```{r}
+
+```
+
+# Estimate True Population Effects
+
+## Regression Setting
+
+Assume complete NHANES dataset as the sup-population. 
+$$
+y_i(s) = \beta_0(s) + X_i \beta_1(s) + \epsilon_i(s), \quad s = 1, 2, \ldots, 1440
+$$
+
+-   $y_i(s)$: PA monitoring data for individual i
+-   $X_i$: Scalar covariate, and we consider age here
+-   $\beta_0(s)$: Time-varying regression coefficients
+-   $\epsilon_i(s) \sim N(0, \sigma^2(s))$
+
+## Estimate and visualize true effects
+
+```{r}
+## Load NHANES Data
+nhanes_df = readRDS('data/pa_df_persub.rds') |> 
+  dplyr::rename(Age = age_in_years_at_screening) |>
+  dplyr::rename(weight = full_sample_2_year_mec_exam_weight)
+min_columns <- nhanes_df %>% 
+  dplyr::select(starts_with("min")) %>% names()
+
+## Point-wise effects: Regression at each time point
+# results.lr <- map_dfr(min_columns, ~ {
+#   model <- lm(reformulate("Age", response = .x), data = nhanes_df)
+#   tidy(model) %>%
+#     filter(term == "Age") %>%
+#     mutate(Variable = .x, Intercept = coef(model)[1], Beta = estimate) %>%
+#     select(Variable, Intercept, Beta)
+# })
+# write_rds(results.lr, 'data/nhanes_true_effect_lr.rds')
+
+results.lr = read_rds('data/nhanes_true_effect_lr.rds') 
+
+## Visualization
+true_effect_raw = plot_pw_effects(results.lr)
+```
+
+## Smoothed True Estimates
+
+### Use GCV to select spar and use cubic spline
+
+```{r}
+intercept_smooth <- smooth.spline(results.lr$Intercept)
+beta_smooth <- smooth.spline(results.lr$Beta)
+  # Here, we use GCV to select spar (cubic smoothing spline)
+  # ‘generalized’ cross-validation (GCV) when cv = FALSE
+results.lr$Intercept_smoothed <- predict(intercept_smooth)$y
+results.lr$Beta_smoothed <- predict(beta_smooth)$y
+```
+
+### Use gam&GCV to smooth estimates
+```{r}
+L = 1440
+knots_min = NULL
+knots = min(L/2, knots_min)
+intercept_smooth <- gam(results.lr$Intercept[1:L] ~ s(c(1:L), bs = "tp", k = knots+1),
+                        method = "GCV.Cp")$fitted.values
+beta_smooth <- gam(results.lr$Beta[1:L] ~ s(c(1:L), bs = "tp", k = knots+1),
+                   method = "GCV.Cp")$fitted.values
+
+results_gam_gcv_dafault = data.frame(Variable = results.lr$Variable[1:L],
+                                     Intercept = intercept_smooth[1:L],
+                                     Beta = beta_smooth[1:L])
+plot_pw_effects(results_gam_gcv_dafault)
+
+write_rds(results_gam_gcv_dafault,
+          'data/nhanes_true_effect_lr_smoothed_gam_default.rds')
+```
+
+
+### Use B-spline to smooth
+
+#### Choose the number of basis
+
+$gcv = -n*SSE/((n-df)^2)$. GCV criterian is used to balance over-fitting
+and Under-fitting.
+
+```{r}
+nbasis_range <- 5:60
+
+# GCV for Intercept
+gcv_intercept <- sapply(nbasis_range, function(k) {
+  basis <- create.bspline.basis(c(1, 1440), nbasis = k)
+  fdParobj <- fdPar(basis, Lfdobj = 2, lambda = 1e-2)
+  smooth <- smooth.basis(argvals = 1:1440, y = results.lr$Intercept, fdParobj)
+  return(smooth$gcv)
+})
+
+# GCV for Beta
+gcv_beta <- sapply(nbasis_range, function(k) {
+  basis <- create.bspline.basis(c(1, 1440), nbasis = k)
+  fdParobj <- fdPar(basis, Lfdobj = 2, lambda = 1e-2)
+  smooth <- smooth.basis(argvals = 1:1440, y = results.lr$Beta, fdParobj)
+  return(smooth$gcv)
+})
+
+gcv_df <- tibble(
+  nbasis = rep(nbasis_range, 2),
+  GCV = c(gcv_beta, gcv_intercept),
+  Type = rep(c("Beta", "Intercept"), each = length(nbasis_range))
+)
+
+ggplot(gcv_df, aes(x = nbasis, y = GCV)) +
+  geom_point(size = 1.2, color = "darkblue") +
+  facet_wrap(~ Type, scales = "free_y") +
+  labs(title = "GCV Scores for Different B-spline Basis Numbers",
+       x = "Number of Basis Functions (Knots)",
+       y = "GCV Score") +
+  theme_minimal(base_size = 14) +
+  theme(strip.text = element_text(face = "bold"))
+```
+
+#### Visualization of basis
+
+```{r}
+library(fda)
+basis <- create.bspline.basis(rangeval = c(0, 1440), nbasis = 25)
+plot(basis, main = "B-spline Basis Functions (25 total)")
+```
+
+#### Generate smoothed estimates
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+fdParobj <- fdPar(basis, Lfdobj = 2, lambda = 1e-2)
+smooth.fd <- smooth.basis(argvals = c(1:1440), y = results.lr$Beta, fdParobj)$fd
+results.lr$Beta_smoothed_bspline = eval.fd(c(1:1440), smooth.fd)
+
+smooth.fd <- smooth.basis(argvals = c(1:1440), y = results.lr$Intercept, fdParobj)$fd
+results.lr$Intercept_smoothed_bspline = eval.fd(c(1:1440), smooth.fd)
+```
+
+### Visualization of smoothed estimates (basis n=25)
+
+```{r,warning=FALSE, results = 'hide', collapse=TRUE}
+facet_labels = c(
+  "Beta" = "beta[Age]",
+  "Intercept" = "beta[0]",
+  "Beta_smoothed" = "beta[Age]~(cubic~spline)",
+  "Intercept_smoothed" = "beta[0]~(cubic~spline)",
+  "Beta_smoothed_bspline" = "beta[Age]~(B~spline)",
+  "Intercept_smoothed_bspline" = "beta[0]~(B~spline)"
+)
+
+type_vars = c(
+  "Beta",
+  "Intercept",
+  "Beta_smoothed",
+  "Intercept_smoothed",
+  "Beta_smoothed_bspline",
+  "Intercept_smoothed_bspline"
+)
+
+plot_pw_effects(results.lr,
+                facet_labels = facet_labels,
+                type_vars = type_vars)
+```
+
+### Export Smoothed Estimates
+
+```{r}
+results.lr.smoothed.bspline = results.lr |>
+  dplyr::select(Variable, Intercept_smoothed_bspline, Beta_smoothed_bspline) |>
+  dplyr::rename(Intercept = Intercept_smoothed_bspline, Beta = Beta_smoothed_bspline)
+
+# write_rds(results.lr.smoothed.bspline,
+#           'data/nhanes_true_effect_lr_smoothed_bspline.rds')
+```
+
+### Extra example
+
+#### increase smoothness of true estimates (basis n=10)
+
+```{r}
+basis <- create.bspline.basis(rangeval = c(0, 1440), nbasis = 10)
+fdParobj <- fdPar(basis, Lfdobj = 2, lambda = 1e-2)
+smooth.fd <- smooth.basis(argvals = c(1:1440), y = results.lr$Beta, fdParobj)$fd
+results.lr$Beta_smoothed_bspline = eval.fd(c(1:1440), smooth.fd)
+
+smooth.fd <- smooth.basis(argvals = c(1:1440), y = results.lr$Intercept, fdParobj)$fd
+results.lr$Intercept_smoothed_bspline = eval.fd(c(1:1440), smooth.fd)
+facet_labels = c(
+  "Beta" = "beta[Age]",
+  "Intercept" = "beta[0]",
+  "Beta_smoothed" = "beta[Age]~(cubic~spline)",
+  "Intercept_smoothed" = "beta[0]~(cubic~spline)",
+  "Beta_smoothed_bspline" = "beta[Age]~(B~spline)",
+  "Intercept_smoothed_bspline" = "beta[0]~(B~spline)"
+)
+
+type_vars = c(
+  "Beta",
+  "Intercept",
+  "Beta_smoothed",
+  "Intercept_smoothed",
+  "Beta_smoothed_bspline",
+  "Intercept_smoothed_bspline"
+)
+
+plot_pw_effects(results.lr,
+                facet_labels = facet_labels,
+                type_vars = type_vars)
+
+results.lr.smoothed.bspline.n10 = results.lr |>
+  dplyr::select(Variable, Intercept_smoothed_bspline, Beta_smoothed_bspline) |>
+  dplyr::rename(Intercept = Intercept_smoothed_bspline, Beta = Beta_smoothed_bspline)
+
+# write_rds(results.lr.smoothed.bspline.n10,
+#           'data/nhanes_true_effect_lr_smoothed_bspline_n10.rds')
+```
+
+# Non-informative sampling
+
+1.  Generate strata selection probabilities ($H=30$) from Dirichlet
+    distribution
+2.  Sample $N=\{15\}$ strata in the simulation
+3.  For each strata $h$ in the selected strata:
+    -   Standardize Age into mean=0 and SD=1
+    -   Calculate inclusion probabilities $p_i = exp(Age_{i}/2)$
+    -   Normalize: $p_{i'} = \frac{p_i}{\sum_{i \in h}p_i}$
+    -   Adjust by expected number of individuals sampled
+        $p_{i''} = min(p_{i'} * I_n * 2, 1)$
+    -   Obtain sample using binomial sampling
+
+## Factors associated with joint-wise CR
+
+```{r}
+## example A: default setting
+exampleA_summary = visualize_from_folder(folder = 'results/NI/sim_noOrigial_survey_L150/',
+                                         file_pattern = "sim_noOrigial_survey_L150_.*\\.rds",
+                                         L = 150)
+
+## case 01: make true estimates smoother
+case01_summary = visualize_from_folder(folder = 'results/NI/case01_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 02: make true estimates smoother + increase Boot Number
+case02_summary = visualize_from_folder(folder = 'results/NI/case02_L150/',
+                                       file_pattern = 'case.*',
+                                       L = 150)
+
+## case 03: increase smooth level (basis number: 25->10)
+case03_summary = visualize_from_folder(folder = 'results/NI/case03_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 04: increase number of knots used in fPCA (34->120)
+case04_summary = visualize_from_folder(folder = 'results/NI/case04_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 05: increase scaling factor (1.2->1.3)
+case05_summary = visualize_from_folder(folder = 'results/NI/case05_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 06: not smooth 
+case06_summary = visualize_from_folder(folder = 'results/NI/case06_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 07: not smooth + run 500 times
+case07_summary = visualize_from_folder(folder = 'results/NI/case07_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 08: not smooth (compare RWYB and weighted)
+case08_summary = visualize_from_folder(folder = 'results/NI/case08_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 09: smooth for CI, but not smooth for variance
+case09_summary = visualize_from_folder(folder = 'results/NI/case09_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 10: not smooth + keep scaling factor=1.2
+case10_summary = visualize_from_folder(folder = 'results/NI/case10_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 11: smooth for CI, not smooth for variance, but increase knot number
+case11_summary = visualize_from_folder(folder = 'results/NI/case11_L150/',
+                                       file_pattern = '',
+                                       L = 150)
+
+## case 12: smooth for variance, but not smooth for CI, but increase knot number
+case12_summary = visualize_from_folder(folder = 'results/NI/case12_L1440//',
+                                       file_pattern = '',
+                                       L = 1440)
+case12_summary
+
+## case 12: smooth for variance, but not smooth for CI, but increase knot number
+case13_summary = visualize_from_folder(folder = 'results/NI/case13_L1440///',
+                                       file_pattern = '',
+                                       L = 1440)
+
+## case 14: smooth for variance, but not smooth for CI, but increase knot number
+# case14_summary = visualize_from_folder(folder = 'results/NI/case14_L1440///',
+#                                        file_pattern = '',
+#                                        L = 1440)
+
+## case 15: smooth for variance, but not smooth for CI
+## change smooth functions for true estimates, beta_hat and variance (smoother?)
+case15_summary = visualize_from_folder(folder = 'results/NI/case14_L1440///',
+                                       file_pattern = '',
+                                       L = 1440)
+```
+
+### Results
+
+#### Default
+
+**Default Parameters:**
+
+True Estimate: Cubic-spline Length of functional domain: L = 150\
+Bootstrap Number: B = 100\
+Knots for smoothing bootstrapped estimates: L = 50\
+Smooth bootstrapped estimates and use smoothed values to conduct CMA:\
+smooth_for_ci = TRUE smooth_for_variance = TRUE\
+Knots for conducting fPCA: L/2 = 75
+
+```{r}
+exampleA_summary
+```
+
+-   L=150, 'Preston' performs better, but jw-coverage ratio lower than
+    expectations (0.9 vs 0.95).
+
+#### Smooth true estimates (basis n=25)
+
+```{r}
+case01_summary
+```
+
+-   Use B-splines to smooth true estimates, and we use 25 basis
+
+#### Smooth true estimates (basis n=10)
+
+```{r}
+case03_summary
+```
+
+#### Increase knot number when conduct fPCA
+
+Smoothed true estimates: basis number n=25\
+knot number for FPCA: 75-\>120\
+smooth_for_ci = TRUE\
+smooth_for_variance = TRUE\
+
+```{r}
+case04_summary
+```
+
+#### Increase scaling factor
+
+Smoothed true estimates: basis number n=25\
+knot number for FPCA: 75-\>120\
+scaling factor: 1.20-\>1.3\
+smooth_for_ci = TRUE\
+smooth_for_variance = TRUE\
+
+```{r}
+case05_summary
+```
+
+#### not smooth for CI and for variance
+
+Smoothed true estimates: basis number n=25\
+knot number for FPCA: 75-\>120\
+scaling factor: 1.20-\>1.3\
+smooth_for_ci = FALSE\
+smooth_for_variance = FALSE\
+
+```{r}
+case08_summary
+```
+
+#### not smooth for CI and for variance, keep scaling factor = 1.2
+
+Smoothed true estimates: basis number n=25\
+knot number for FPCA: 75-\>120\
+scaling factor: 1.20\
+smooth_for_ci = FALSE\
+smooth_for_variance = FALSE\
+
+```{r}
+case10_summary
+```
+
+#### smooth for CI, but not smooth for variance, keep scaling factor = 1.2
+
+Smoothed true estimates: basis number n=25\
+knot number for FPCA: 75-\>120\
+scaling factor: 1.20\
+smooth_for_ci = TRUE\
+smooth_for_variance = FALSE\
+
+```{r}
+case11_summary
+```
+
+#### smooth for variance, but not smooth for CI
+
+Smoothed true estimates: basis number n=25\
+knot number for FPCA: 75-\>120\
+scaling factor: 1.20-\>1.3\
+smooth_for_ci = TRUE\
+smooth_for_variance = FALSE\
+
+```{r}
+case12_summary
+```
+
+
+## RWYB vs Weighted
+
+![](images/clipboard-2880246023.png)
+
+```{r, fig.width = 8, fig.height = 12}
+var_name = c('Intercept', 'Beta')
+L = 150
+testL = 1:L
+dat = read_rds('tmp_result/NI_visualization_case09_L150.rds')
+
+plot = list()
+plot[['RWYB']] = visualize_notCover(
+  beta_true = t(results.lr |> dplyr::select(-Variable))[, testL],
+  mod_output = dat[[1]],
+  L_domain = testL,
+  subtitle = 'Rao-Wu-Yue-Beaumont'
+)
+plot[['Preston']] = visualize_notCover(
+  beta_true = t(results.lr |> dplyr::select(-Variable))[, testL],
+  mod_output = dat[[2]],
+  L_domain = testL,
+  subtitle = 'Preston'
+)
+plot[['Weighted']] = visualize_notCover(
+  beta_true = t(results.lr |> dplyr::select(-Variable))[, testL],
+  mod_output = dat[[3]],
+  L_domain = testL,
+  subtitle = 'Weighted'
+)
+
+wrap_plots(plot, nrow = 3, ncol = 1) +
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom")
+```
