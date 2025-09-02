@@ -23,8 +23,8 @@ source(here::here("R", "00_data_gen_function_ff.R"))
 source(here::here("R", "utils.R"))
 source(here::here("R", "create_settings.R"))
 
-force = TRUE
-force_iter = TRUE
+force = FALSE
+force_iter = FALSE
 nsim = 200
 B = 500
 ncores = parallelly::availableCores()
