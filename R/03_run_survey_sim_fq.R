@@ -47,7 +47,7 @@ if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to f
   temp = settings_new[ifold,]
 
   # check to see if old fold exists
-  if(temp$inf_level == 0 || temp$inf_level == 10) {
+  if(temp$inf_level == 0 || temp$inf_level == 15) {
     old_fold = settings %>%
       filter(scenario == temp$scenario,
              family == temp$family,
@@ -57,7 +57,7 @@ if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to f
              snr_eps == temp$snr_eps,
              strata_sigma == temp$strata_sigma,
              strata_scale == temp$strata_scale,
-             inf_level == temp$inf_level / 2) %>% # old inf level is 0 or 5
+             inf_level == temp$inf_level / 3) %>% # old inf level is 0 or 15
       pull(fold)
     old_file =  here::here("results", "simulations", "survey_sim3", paste0("fold_", sprintf("%03d", old_fold), ".rds"))
     old_partials = here::here("results", "simulations", "survey_sim3", paste0("fold_", sprintf("%03d", old_fold), "_partials"))
