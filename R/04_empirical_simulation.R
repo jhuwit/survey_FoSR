@@ -56,7 +56,7 @@ if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to f
     mutate(min = sub(".*min\\_", "", name) %>% as.numeric) %>%
     mutate(hour = ceiling(min / 15)) %>%
     group_by(hour, SEQN) %>%
-    summarize(mims = mean(value, na.rm = TRUE),
+    summarize(mims = sum(value, na.rm = TRUE),
               .groups = "drop") %>%
     pivot_wider(names_from = "hour", values_from = "mims", names_prefix = "hour_")
   # need to arrange first
