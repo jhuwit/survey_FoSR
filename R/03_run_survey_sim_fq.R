@@ -132,7 +132,7 @@ if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to f
 
       res = future_map(
         .x = boot_types,
-        .f = run_boots_fast,
+        .f = run_boots_xfast,
         betaHat = betaHat[[1]], # don't actually use betahat in calculation so we can just use the weighted one
         data = data,
         family = temp$family,
