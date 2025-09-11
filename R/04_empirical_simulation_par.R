@@ -175,7 +175,7 @@ if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to f
     inclusion_probs = plogis(score_compressed)
   }
 
-  plan(multisession, workers = parallel::detectCores() - 1)
+  plan(multisession, workers = 9)
 
   sim_res_list = future_map(
     .x = 1:nsim,

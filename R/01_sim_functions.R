@@ -474,6 +474,131 @@ run_boots_fast = function(data, boot_type, betaHat, family = "gaussian",
     return(betaTilde_boot)
 }
 
+run_boots_fast_single = function(data, boot_type, betaHat, family = "gaussian",
+                          num_boots = 500, seed = 2025, L,
+                          samp_stages = NULL,
+                          model_formula = as.formula(paste0('Y~', 'X'))) {
+  if(!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "weighted", "unweighted"))){
+    stop("please specify boot_type as one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'weighted', 'unweighted'")
+  }
+  argvals = 1:L
+  data = data %>%
+    mutate(row_id = row_number())
+  out_index <- grep(paste0("^", model_formula[2]), names(data))
+  Y_mat <- as.matrix(data[, out_index])
+  X_base <- model.matrix(stats::as.formula(paste0("~", model_formula[3])), data = data)
+
+  if (is.character(family)) {
+    family <- get(family, mode = "function", envir = parent.frame())()
+  }
+
+  # array with dimensions num_coefficients x length functional domain x num_boots
+  betaTilde_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), num_boots))
+  # get replicates to avoid sample repeatedly
+  if (boot_type == "BRR") {
+    sample_data = function(df) {
+      df %>%
+        group_by(strata) %>%
+        summarise(psu = sample(psu, size = 1))
+    }
+    set.seed(seed)
+    indices = replicate(num_boots, sample_data(data), simplify = FALSE)
+  } else if (boot_type == "weighted") {
+    set.seed(seed)
+    boot_indices <- replicate(
+      num_boots,
+      sample(
+        seq_len(nrow(data)),
+        size = nrow(data),
+        replace = TRUE,
+        prob = data$weight / sum(data$weight)
+      ),
+      simplify = FALSE
+    )
+  } else if (boot_type == "unweighted") {
+    set.seed(seed)
+    boot_indices <- replicate(num_boots,
+                              sample(
+                                seq_len(nrow(data)),
+                                size = nrow(data),
+                                replace = TRUE
+                              ),
+                              simplify = FALSE)
+  }
+
+  if (boot_type == "BRR") {
+    for (l in 1:L) {
+      data$Yl <- Y_mat[, l]
+      coefs <- lapply(1:num_boots, function(r) {
+        dat_tmp <- data %>%
+          inner_join(indices[[r]], by = c("psu", "strata")) %>%
+          mutate(weight = weight * 2) # double weights via BRR method
+        # Subset model matrix correctly
+        X_tmp <- X_base[dat_tmp$row_id, , drop = FALSE]
+        dat_tmp$Yl <- Y_mat[dat_tmp$row_id, l]
+        # Fit model quickly
+        fit <- glm.fit(
+          x = X_tmp,
+          y = dat_tmp$Yl,
+          weights = dat_tmp$weight,
+          family = family
+        )
+        fit$coefficients
+      })
+      betaTilde_boot[, l, ] <- do.call(cbind, coefs)
+    }
+  } else if (boot_type %in% c("weighted", "unweighted")) {
+    for (l in 1:L) {
+      data$Yl <- Y_mat[, l]
+      coefs <- lapply(1:num_boots, function(b) {
+        dat_tmp <- data[boot_indices[[b]], ]
+        X_tmp <- X_base[dat_tmp$row_id, , drop = FALSE]
+        dat_tmp$Yl <- Y_mat[dat_tmp$row_id, l]
+        if (boot_type == "weighted") {
+          fit <- glm.fit(x = X_tmp, y = dat_tmp$Yl,
+                         weights = dat_tmp$weight, family = family)
+        } else {
+          fit <- glm.fit(x = X_tmp, y = dat_tmp$Yl,
+                         family = family)
+        }
+        fit$coefficients
+      })
+      betaTilde_boot[, l, ] <- do.call(cbind, coefs)
+    }
+  } else if (boot_type == "Rao-Wu-Yue-Beaumont") {
+    svy_design <- svydesign(
+      ids = ~ ID,
+      # strata = ~ strata,
+      weights = ~ weight,
+      data = data,
+      nest = TRUE
+    )
+    set.seed(seed)
+    rwyb_wts = make_rwyb_bootstrap_weights(
+      num_replicates = num_boots,
+      samp_unit_ids = svy_design$cluster,
+      strata_ids = svy_design$strata,
+      samp_unit_sel_probs = data$p_stage1,
+      samp_method_by_stage = samp_stages,
+      allow_final_stage_singletons = TRUE,
+      output = "weights"
+    )
+    for (l in 1:L) {
+      data$Yl <- Y_mat[, l]
+      coefs <- lapply(1:num_boots, function(b) {
+        wts_temp = rwyb_wts[, b]
+        fit <- glm.fit(x = X_base,
+                       y = data$Yl,
+                       weights = wts_temp,
+                       family = family)
+        fit$coefficients
+      })
+      betaTilde_boot[, l, ] <- do.call(cbind, coefs)
+    }
+  }
+  return(betaTilde_boot)
+}
+
 run_boots_fast_internal = function(data, boot_type, betaHat, family = "gaussian",
                           num_boots = 500, seed = 2025, L,
                           samp_stages = NULL,
