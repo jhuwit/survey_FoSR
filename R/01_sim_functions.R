@@ -77,7 +77,9 @@ get_betatilde = function(data, family = "gaussian", type = "weighted",
 get_betahat = function(betaTilde, L,
                        nknots_min = NULL){
   argvals = 1:L
-  nknots <- min(round(L / 2), nknots_min)
+  # nknots <- min(round(L / 2), nknots_min)
+  nknots <- if (is.null(nknots_min)) round(L / 2) else min(round(L / 2), nknots_min)
+
 
   betaHat <- t(apply(betaTilde, 1, function(x) mgcv::gam(x ~ s(argvals, bs = "tp",
                                                                k = (nknots + 1)),
@@ -109,6 +111,162 @@ lm_multi <- function(X, Y) {
   # returns (p × L) coefficient matrix
   coef_mat
 }
+
+glm_batch_multiY <- function(
+    X, y_mat, w = NULL,
+    family,
+    add_intercept = TRUE,
+    offset = NULL,              # length-n or n x B (broadcasted if needed)
+    start = NULL,               # optional p[+1]-vector to warm start all columns
+    maxit = 50, tol = 1e-8, ridge = 1e-8,
+    return_se = TRUE, estimate_phi = TRUE, verbose = FALSE
+) {
+  stopifnot(is.matrix(X), is.matrix(y_mat))
+  n <- nrow(X); p <- ncol(X); B <- ncol(y_mat)
+  stopifnot(nrow(y_mat) == n)
+
+  if (is.null(w)) {
+    w <- rep(1, n)   # no weights → all equal to 1
+  }
+  stopifnot(length(w) == n, is.numeric(w))
+
+  if (add_intercept) X <- cbind(Intercept = 1, X)
+  p <- ncol(X)
+
+  # offsets: allow NULL (zeros), length-n (shared), n x 1 (shared), or n x B (per column)
+  if (is.null(offset)) {
+    offset <- matrix(0, n, B)
+  } else if (is.vector(offset) && length(offset) == n) {
+    offset <- matrix(offset, n, B)
+  } else if (is.matrix(offset) && nrow(offset) == n && ncol(offset) == 1) {
+    offset <- matrix(offset[,1], n, B)
+  } else if (is.matrix(offset) && nrow(offset) == n && ncol(offset) == B) {
+    # as provided
+  } else {
+    stop("offset must be NULL, length-n, n×1, or n×B")
+  }
+
+  # family bits
+  linkinv    <- family$linkinv
+  mu_eta_fun <- family$mu.eta
+  variance   <- family$variance
+  dev_resids <- family$dev.resids
+
+  eps <- .Machine$double.eps^(2/3)
+
+  # warm start
+  if (!is.null(start)) {
+    stopifnot(length(start) == p)
+    Beta <- matrix(start, p, B)
+  } else {
+    Beta <- matrix(0, p, B)
+  }
+
+  # Precompute X' once
+  Xt <- t(X)
+
+  converged <- rep(FALSE, B)
+  it <- 0L
+
+  for (it in seq_len(maxit)) {
+    # ETA & MU (n x B)
+    Eta <- X %*% Beta
+    Eta <- Eta + offset
+    Eta <- pmin(pmax(Eta, -35), 35)
+    Mu  <- linkinv(Eta)
+
+    # dμ/dη and Var(μ) (n x B)
+    mu_eta <- mu_eta_fun(Eta); mu_eta[abs(mu_eta) < eps] <- eps
+    VarMu  <- variance(Mu);    VarMu[VarMu  < eps] <- eps
+
+    # IRLS working weights and responses
+    # Ww = w * (dμ/dη)^2 / Var(μ)  (n x B), z = η + (y - μ) / (dμ/dη)
+    Ww <- (mu_eta^2 / VarMu)
+    Ww <- Ww * matrix(w, n, B)      # broadcast w across columns
+    Z  <- Eta + (y_mat - Mu) / mu_eta
+
+    # RHS for all fits at once: X' (Ww * Z)  (p x B)
+    RHS <- Xt %*% (Ww * Z)
+
+    step_max <- rep(0, B)
+    active <- which(!converged)
+    if (!length(active)) break
+
+    # For each column, H_b = X' diag(w * s_b) X where s_b = (dμ/dη)^2 / Var(μ)
+    s_all <- (mu_eta^2 / VarMu)      # n x B (without prior weights)
+    for (b in active) {
+      wb <- w * s_all[, b]           # length-n
+      if (!any(is.finite(wb)) || sum(wb) < eps) next
+
+      # Efficient: crossprod(X, wb * X) without forming diag
+      Xw <- X * wb
+      H  <- Xt %*% Xw
+      diag(H) <- diag(H) + ridge
+
+      beta_new <- tryCatch({
+        Rchol <- chol(H)
+        backsolve(Rchol, forwardsolve(t(Rchol), RHS[, b]))
+      }, error = function(e) solve(H, RHS[, b], tol = 1e-12))
+
+      step_max[b] <- max(abs(beta_new - Beta[, b]))
+      Beta[, b]   <- beta_new
+    }
+
+    newly_conv <- (!converged) & (step_max < tol)
+    converged[newly_conv] <- TRUE
+
+    if (verbose) {
+      cat(sprintf("Iter %d: active=%d, max step=%.3e\n",
+                  it, length(active), if (length(active)) max(step_max[active]) else 0))
+    }
+    if (all(converged)) break
+  }
+
+  out <- list(coef = Beta, iter = it, converged = converged)
+
+  if (return_se) {
+    # recompute at solution
+    Eta <- X %*% Beta + offset
+    Eta <- pmin(pmax(Eta, -35), 35)
+    Mu  <- linkinv(Eta)
+    mu_eta <- mu_eta_fun(Eta); mu_eta[abs(mu_eta) < eps] <- eps
+    VarMu  <- variance(Mu);    VarMu[VarMu  < eps] <- eps
+    s_all  <- (mu_eta^2 / VarMu)
+
+    # dispersion (φ) per column if needed
+    fam_name <- tolower(family$family)
+    phi <- rep(1, B)
+    needs_phi <- estimate_phi && !grepl("binomial|poisson", fam_name)
+    if (needs_phi) {
+      for (b in seq_len(B)) {
+        wb <- w
+        wb[!is.finite(wb) | wb < 0] <- 0
+        phi[b] <- sum(dev_resids(y_mat[, b], Mu[, b], wb)) / max(n - p, 1L)
+      }
+    }
+
+    SE <- matrix(NA_real_, p, B, dimnames = list(colnames(X), colnames(y_mat)))
+    vcov_list <- vector("list", B)
+    for (b in seq_len(B)) {
+      wb <- w * s_all[, b]
+      if (!any(is.finite(wb)) || sum(wb) < eps) next
+      H <- Xt %*% (X * wb)
+      diag(H) <- diag(H) + ridge
+      invH <- tryCatch({
+        Rchol <- chol(H); chol2inv(Rchol)
+      }, error = function(e) solve(H, tol = 1e-12))
+      vc <- invH * phi[b]
+      vcov_list[[b]] <- vc
+      SE[, b] <- sqrt(pmax(diag(vc), 0))
+    }
+    out$se <- SE
+    out$vcov <- vcov_list
+    out$phi <- phi
+  }
+
+  out
+}
+
 
 run_boots_xfast = function(data, boot_type, betaHat, family = "gaussian",
                            num_boots = 500, seed = 2025, L,
@@ -173,16 +331,8 @@ run_boots_xfast = function(data, boot_type, betaHat, family = "gaussian",
         # Fit all L responses at once
         coef_mat = lm_wls_multi(X_tmp, Y_tmp, dat_tmp$weight)
       } else {
-        # Still need to loop for general GLM
-        coef_mat = apply(Y_tmp, 2, function(y) {
-          glm.fit(
-            x = X_tmp,
-            y = y,
-            weights = dat_tmp$weight,
-            family = family,
-            control = glm.control(maxit = 5000)
-          )$coefficients
-        })
+        coef_mat = glm_batch_multiY(X = X_tmp, y_mat = Y_tmp, w = dat_tmp$weight, family = family, return_se = FALSE,
+                                    add_intercept = FALSE)$coef
       }
       coef_mat  # (p × L)
     })
@@ -199,15 +349,8 @@ run_boots_xfast = function(data, boot_type, betaHat, family = "gaussian",
         # Fit all L responses at once
         coef_mat = lm_multi(X_tmp, Y_tmp)
       } else {
-        # Still need to loop for general GLM
-        coef_mat = apply(Y_tmp, 2, function(y) {
-          glm.fit(
-            x = X_tmp,
-            y = y,
-            family = family,
-            control = glm.control(maxit = 5000)
-          )$coefficients
-        })
+        coef_mat = glm_batch_multiY(X = X_tmp, y_mat = Y_tmp, family = family, return_se = FALSE,
+                                    add_intercept = FALSE)$coef
       }
       coef_mat  # (p × L)
     })
@@ -221,16 +364,8 @@ run_boots_xfast = function(data, boot_type, betaHat, family = "gaussian",
         # Fit all L responses at once
         coef_mat = lm_wls_multi(X_tmp, Y_tmp, dat_tmp$weight)
       } else {
-        # Still need to loop for general GLM
-        coef_mat = apply(Y_tmp, 2, function(y) {
-          glm.fit(
-            x = X_tmp,
-            y = y,
-            weights = dat_tmp$weight,
-            family = family,
-            control = glm.control(maxit = 5000)
-          )$coefficients
-        })
+        coef_mat = glm_batch_multiY(X = X_tmp, y_mat = Y_tmp, w = dat_tmp$weight, family = family, return_se = FALSE,
+                                    add_intercept = FALSE)$coef
       }
       coef_mat  # (p × L)
     })
@@ -266,16 +401,8 @@ run_boots_xfast = function(data, boot_type, betaHat, family = "gaussian",
         # Fit all L responses at once
         coef_mat = lm_wls_multi(X_base, Y_mat, wts_temp)
       } else {
-        # Still need to loop for general GLM
-        coef_mat = apply(Y_mat, 2, function(y) {
-          glm.fit(
-            x = X_base,
-            y = y,
-            weights = wts_temp,
-            family = family,
-            control = glm.control(maxit = 5000)
-          )$coefficients
-        })
+        coef_mat = glm_batch_multiY(X = X_base, y_mat = Y_mat, w = wts_temp, family = family, return_se = FALSE,
+                                    add_intercept = FALSE)$coef
       }
       coef_mat  # (p × L)
     })
@@ -414,6 +541,98 @@ get_coverage_stats = function(mod_output, beta_true, name, L){
     boot_type = name)
 }
 
+
+get_coverage_stats_fui = function(mod_output, beta_true, L){
+  MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
+  mean_pw_se = apply(mod_output$betaHat.var, 3, function(mat) mean(sqrt(diag(mat))))
+  mean_joint_se <- numeric(nrow(beta_true))  # Store mean CI width
+
+  cover_joint <- logical(nrow(beta_true))  # Using logical instead of NA-filled vector
+  cover_pw <- matrix(FALSE, nrow(beta_true), L)
+
+  # Extract the diagonal elements of each variance matrix upfront
+  sqrt_diag_var <- apply(mod_output$betaHat.var, 3, function(mat) sqrt(diag(mat)))
+
+  # Loop efficiently
+  for (p in seq_along(cover_joint)) {
+    true <- beta_true[p,]
+    sqrt_diag_p <- sqrt_diag_var[, p]  # Extract precomputed diagonal elements
+
+    # Compute upper and lower bounds in one step
+    margin <- mod_output$qn[p] * sqrt_diag_p
+    mean_joint_se[p] <- mean(margin)
+
+    upper <- mod_output$betaHat[p,] + margin
+    lower <- mod_output$betaHat[p,] - margin
+
+    margin_pw <- 1.96 * sqrt_diag_p
+    upper_pw <- mod_output$betaHat[p,] + margin_pw
+    lower_pw <- mod_output$betaHat[p,] - margin_pw
+
+    # Compute joint and pointwise coverage efficiently
+    covered <- (lower < true) & (upper > true)
+    covered_pw <- (lower_pw < true) & (upper_pw > true)
+
+    cover_joint[p] <- all(covered)  # Joint coverage check
+    cover_pw[p, ] <- covered_pw     # Assign logical vector directly
+  }
+  cover_pw_int = which(cover_pw[1, ])
+  cover_pw_x = which(cover_pw[2, ])
+  result = tibble(
+    MISE = MISE %>% unname(),
+    mean_joint_se = mean_joint_se,
+    mean_pw_se = mean_pw_se,
+    cover_joint = cover_joint,
+    cover_pw = rowSums(cover_pw) / L,
+    var = rownames(beta_true)) %>%
+    mutate(vector_col = map(var, ~ ifelse(.x  == "Intercept", list(cover_pw_int), list(cover_pw_x))))
+  return(result)
+
+}
+
+
+get_coverage_stats_famm = function(res, beta_true, L = 50){
+  coef_pffr = coef(res, n1 = L)
+  betaHat_pffr <- betaHat_pffr.se <- matrix(NA, nrow = 2, ncol = L)
+  betaHat_pffr[1,] = as.vector(coef_pffr$smterms$`Intercept(yindex)`$value) + unname(res$coef[1])
+  betaHat_pffr[2,] = as.vector(coef_pffr$smterms$`X(yindex)`$value)
+  betaHat_pffr.se[1,] = as.vector(coef_pffr$smterms$`Intercept(yindex)`$se)
+  betaHat_pffr.se[2,] = as.vector(coef_pffr$smterms$`X(yindex)`$se)
+  MISE = rowMeans((betaHat_pffr - beta_true)^2)
+  mean_pw_se = apply(betaHat_pffr.se, 1, mean)
+
+  cover_pw = matrix(FALSE, nrow(beta_true), L)
+  for(p in seq_along(MISE)){
+    cover_upper = which((betaHat_pffr[p,]+(1.96*betaHat_pffr.se[p,])) > beta_true[p,])
+    cover_lower = which((betaHat_pffr[p,]-(1.96*betaHat_pffr.se[p,])) < beta_true[p,])
+    cover_pw[p, intersect(cover_lower, cover_upper)] = TRUE
+  }
+
+  cover_pw_int = which(cover_pw[1, ])
+  cover_pw_x = which(cover_pw[2, ])
+
+
+  tibble(
+    MISE = MISE %>% unname(),
+    mean_pw_se = mean_pw_se,
+    cover_pw = rowSums(cover_pw) / L,
+    var = rownames(beta_true)) %>%
+    mutate(vector_col = map(var, ~ ifelse(.x  == "Intercept", list(cover_pw_int), list(cover_pw_x))))
+}
+
+pffrcoef_to_tf = function(coef) {
+
+  coef =
+    coef %>%
+    mutate(
+      id = "ID"
+    ) %>%
+    tf_nest(value:se, .id = id, .arg = yindex.vec) %>%
+    select(coef = value, se)
+
+  coef
+
+}
 
 ######### old
 # betaTilde = get_betatilde(data)

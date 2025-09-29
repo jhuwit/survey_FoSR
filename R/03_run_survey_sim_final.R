@@ -5,7 +5,6 @@ library(here)
 library(devtools)
 library(fastFMM)
 library(haven)
-library(dplyr)
 library(survey)
 library(progress)
 library(lme4)
@@ -13,21 +12,23 @@ library(paletteer)
 library(mgcv)
 library(ggplot2)
 library(gridExtra)
-library(tidyverse)
 library(tidyfun)
 library(mvtnorm)
 library(refund)
 library(svrep)
-source(here::here("R", "01_sim_functions.R"))
-source(here::here("R", "00_data_gen_function_ff.R"))
+source(here::here("R_cp", "01_sim_functions.R"))
+source(here::here("R_cp", "00_data_gen_function_ff.R"))
 source(here::here("R", "utils.R"))
-source(here::here("R", "create_settings.R"))
+source(here::here("R_cp", "create_survey_settings.R"))
+
 
 force = FALSE
 force_iter = FALSE
 nsim = 200
 B = 500
-ncores = parallelly::availableCores()
+# ncores = parallelly::availableCores()
+ncores = future::availableCores()
+
 fit_types = c('weighted', 'unweighted')
 boot_types = c('Rao-Wu-Yue-Beaumont', 'BRR', 'weighted', 'unweighted')
 options(survey.lonely.psu = "adjust")
@@ -35,27 +36,15 @@ options(survey.lonely.psu = "adjust")
 
 ifold = get_fold()
 
-temp = settings %>%
-  filter(fold == ifold)
+outfile = here::here("results", "simulations", "survey_sim2", paste0("fold_", sprintf("%03d", ifold), ".rds"))
 
-outfile = here::here("results", "simulations", "survey_sim4", paste0("fold_", sprintf("%03d", ifold), ".rds"))
-# outfile2 = here::here("results", "simulations", "survey_sim4", paste0("fold_", sprintf("%03d", ifold), "_res.rds"))
-# create partial dir to store ea. iteration
+if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to force re-do it
+  if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
+  partial_dir = here::here("results", "simulations", "survey_sim2", paste0("fold_", sprintf("%03d", ifold), "_partials"))
+  if (!dir.exists(partial_dir)) dir.create(partial_dir)
 
-if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
+  temp = settings_new[ifold,]
 
-partial_dir = here::here("results", "simulations", "survey_sim4", paste0("fold_", sprintf("%03d", ifold), "_partials"))
-if (!dir.exists(partial_dir)) dir.create(partial_dir)
-
-# partial_dir2 = here::here("results", "simulations", "survey_sim4", paste0("fold_", sprintf("%03d", ifold), "_partials2"))
-# if (!dir.exists(partial_dir2)) dir.create(partial_dir2)
-#
-completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
-  str_extract("\\d+") %>%
-  as.integer()
-
-if(!file.exists(outfile) || force) {
-  temp = settings[ifold, ] # set settings for this simulation
 
   lst = generate_superpopulation(
     scenario = temp$scenario,
@@ -72,6 +61,11 @@ if(!file.exists(outfile) || force) {
 
   plan(multisession, workers = ncores)
 
+  # check for completed iters
+  completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
+    str_extract("\\d+") %>%
+    as.integer()
+
   for (iter in 1:nsim) {
     if (iter %in% completed_iters && !force_iter) {
       message("Skipping completed iteration: ", iter)
@@ -80,7 +74,7 @@ if(!file.exists(outfile) || force) {
 
     set.seed(iter)
     x = try({
-      data <- sample_from_population_wor(
+      data = sample_from_population_wor(
         X_des = lst$X_des,
         Y_obs = lst$Y_obs,
         L = temp$len,
@@ -90,8 +84,9 @@ if(!file.exists(outfile) || force) {
         psu_assignments = lst$psu_assignments,
         dirichlet_probs = lst$dirichlet_probs,
         seed = iter,
-        inf_level = temp$inf_level * 2,
+        inf_level = temp$inf_level,
         compression = 2,
+        family = temp$family
       )
       print(summary(data$weight))
 
@@ -108,7 +103,7 @@ if(!file.exists(outfile) || force) {
 
       res = future_map(
         .x = boot_types,
-        .f = run_boots_fast,
+        .f = run_boots_xfast,
         betaHat = betaHat[[1]], # don't actually use betahat in calculation so we can just use the weighted one
         data = data,
         family = temp$family,
@@ -142,7 +137,6 @@ if(!file.exists(outfile) || force) {
 
 
       write_rds(stats, file = file.path(partial_dir, sprintf("iter_%03d.rds", iter)))
-      # write_rds(res, file = file.path(partial_dir2, sprintf("iter_%03d.rds", iter)))
 
     })
     rm(x)
@@ -153,22 +147,12 @@ if(!file.exists(outfile) || force) {
 
   partial_files = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$", full.names = TRUE)
 
-  sim_res = map(partial_files, read_rds) %>%
+  sim_res = map(partial_files, \(x) read_rds(x) %>% mutate(id = sub(".*iter_(.+)\\.rds.*", "\\1", basename(x)))) %>%
     keep(., is.data.frame) %>%
-    list_rbind(names_to = "id")
+    list_rbind()
 
   write_rds(sim_res, file = outfile)
 
-  # partial_files2 = list.files(partial_dir2, pattern = "^iter_\\d+\\.rds$", full.names = TRUE)
-  #
-  # sim_res = map(partial_files2, read_rds)
-  #
-  # write_rds(sim_res, file = outfile2)
 
   unlink(partial_dir, recursive = TRUE)
-  # unlink(partial_dir2, recursive = TRUE)
-
-
 }
-
-

@@ -1,6 +1,3 @@
-### generate PA data
-
-
 library(here)
 library(devtools)
 library(tictoc)
@@ -18,115 +15,72 @@ library(gridExtra)
 library(refund)
 library(tidyverse)
 library(parallel)
-source(here::here("R", "sim_functions_unwt.R"))
-ncores_total = parallelly::availableCores() - 1
+source(here::here("R_cp", "sim_functions_unwt.R"))
+source(here::here("R_cp", "01_sim_functions.R"))
+source(here::here("R_cp", "00_data_gen_function_ff.R"))
+source(here::here("R_cp", "create_settings_nonsurvey.R"))
+source(here::here("R_cp", "utils.R"))
+
+
 force = TRUE
-
-source(here::here("R", "utils.R"))
-sim_settings = read_rds(here::here("sim_data", "sim_settings_nonsurvey.rds"))
-
-
-keep_folds =
-  sim_settings %>%
-  filter(num_boots == 500) %>%
-  group_by(family, scenario, L, n) %>%
-  slice(1) %>%
-  ungroup() %>%
-  pull(fold)
-
-sim_settings =
-  sim_settings %>%
-  filter(num_boots == 500) %>%
-  filter(family == "gaussian" | fold %in% keep_folds)
-
-sim_settings %>%
-  filter(family != "gaussian") %>%
-  pull(fold) %>%
-  paste(collapse = ",")
+force_iter = FALSE
+nsim = 200
+B = 500
 
 ifold = get_fold()
-# ifold = 111
-fname = paste0("sim_fold_", sprintf("%03d", ifold), ".rds")
+# ifold = 1
+outfile = here::here("results", "simulations", "non_survey2", paste0("fold_", sprintf("%03d", ifold), ".rds"))
 
+if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to force re-do it
+  if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
+  partial_dir = here::here("results", "simulations", "non_survey2", paste0("fold_", sprintf("%03d", ifold), "_partials"))
+  if (!dir.exists(partial_dir)) dir.create(partial_dir, recursive = TRUE)
 
+  temp = sim_settings %>% filter(fold == ifold) # set settings for this simulation
 
-if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
-   force) {
-  tmp_settings = sim_settings %>% filter(fold == ifold) # set settings for this simulation
+  # check for completed iters
+  completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
+    str_extract("\\d+") %>%
+    as.integer()
 
+  for (iter in 1:nsim) {
+    if (iter %in% completed_iters && !force_iter) {
+      message("Skipping completed iteration: ", iter)
+      next
+    }
 
-  scen = tmp_settings$scenario
-  sigma = tmp_settings$sigma
-  family = tmp_settings$family
-  B = tmp_settings$num_boots
-  samp_size = tmp_settings$n
-  nsims = 500
-  len = tmp_settings$L
-  # if(samp_size > 1000 || len > 1000){
-  #   run_bayes = FALSE
-  # } else{
-  #   run_bayes = TRUE
-  # }
-  run_bayes = FALSE
-  if(family == "gaussian"){ # if gaussian, we don't need to bootstrap so don't need inner parallelization
-    ncores_outer = ncores_total
-  } else{
-    ncores_outer = ceiling(ncores_total / 2)
-    ncores_inner = ncores_total - ncores_outer
-  }
-  plan(multisession, workers = ncores_outer)
-  sim_res <- future_map(1:nsims, function(iter) {
+    set.seed(iter)
     x = try({
-      data = generate_population(
-        n = samp_size,
-        L = len,
-        scenario = scen,
-        family = family,
+      data = generate_population_nonsurvey(
+        n = temp$n,
+        L = temp$L,
+        scenario = temp$scenario,
+        family = temp$family,
         seed = iter,
-        SNR_sigma = sigma
+        snr_eps = temp$sigma
       )
       sample_data = data$sample_data
 
-      #### fui
-      if(family != "gaussian") {
-        tic()
-        b_hat =
-          sample_data %>%
-          get_betatilde(., family = family) %>%
-          get_betahat(., L = len)
+      tic()
+      b_hat =
+        sample_data %>%
+        get_betatilde(., family = temp$family, type = "unweighted") %>%
+        get_betahat(., L = temp$L)
 
-        boots = run_boots(
-          b_hat,
-          set_seed = TRUE,
-          data = sample_data,
-          seed = iter,
-          family = family,
-          num_boots = B,
-          L = len,
-          parallel = TRUE,
-          ncores_inner = ncores_inner
-        )
+      boots = run_boots_xfast(data = sample_data,
+                            betaHat = b_hat,
+                            family = temp$family,
+                            seed = 2025,
+                            L = temp$L,
+                            num_boots = temp$num_boots,
+                            boot_type = "unweighted")
 
-        ci = get_cis_boot(boots, b_hat, smooth_for_ci = TRUE, L = len)
-        elapsed_time = toc(quiet = TRUE)
-        stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = len) %>%
-          mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
-        rm(boots)
-      } else {
-        tic()
-        beta_tilde =
-          sample_data %>%
-          get_betatilde(., family = family)
-
-
-        b_hat = beta_tilde %>%
-          get_betahat(., L = len)
-
-        ci = get_cis_analytic(betaHat = b_hat, betaTilde = beta_tilde, L = len, data = sample_data)
-        elapsed_time = toc(quiet = TRUE)
-        stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = len) %>%
-          mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
-      }
+      ci = get_cis(boots, betaHat = b_hat, smooth_for_ci = TRUE, L = temp$L,
+                   mult_fac = 1)
+      elapsed_time = toc(quiet = TRUE)
+      stats_fui = get_coverage_stats_fui(ci, beta_true = data$beta_true, L = temp$L) %>%
+        mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
+      rm(boots)
 
       elapsed_time <- NULL
 
@@ -145,7 +99,7 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
           Y_mat ~ X,
           data = .,
           algorithm = "bam",
-          family = family,
+          family = temp$family,
           method = "fREML",
           bs.yindex = list(
             bs = "ps",
@@ -154,71 +108,32 @@ if(!file.exists(here::here("results", "simulations", "non_survey", fname)) ||
           )
         )
       elapsed_time = toc(quiet = TRUE)
-      stats_famm = get_coverage_stats_famm(fit_pffr, beta_true = data$beta_true, L = len) %>%
+      stats_famm = get_coverage_stats_famm(fit_pffr, beta_true = data$beta_true, L = temp$L) %>%
         mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
 
       ## bayes
-      if(family == "gaussian" && run_bayes){ # can only run bayes for gaussian models
-        Y_mat =
-          sample_data %>%
-          select(starts_with("Y")) %>%
-          as.matrix()
-        df = sample_data %>%
-          select(-starts_with("Y")) %>%
-          mutate(Ym = Y_mat)
-        tic()
-        fit_bayes = refund::bayes_fosr(Ym ~ X, est.method = "Gibbs", data = df)
-        elapsed_time = toc(quiet = TRUE)
-        rm(df)
 
-        stats_bayes = get_coverage_stats_bayes(fit_bayes, beta_true = data$beta_true, L = len) %>%
-          mutate(time = unname(elapsed_time$toc - elapsed_time$tic))
+      stats =
+        stats_famm %>%
+        mutate(type = "FAMM") %>%
+        bind_rows(stats_fui %>% mutate(type = "FUI"))
 
-        ret =
-          stats_famm %>%
-          mutate(type = "FAMM") %>%
-          bind_rows(stats_fui %>% mutate(type = "FUI")) %>%
-          bind_rows(stats_bayes %>% mutate(type = "Bayes"))
-        rm(stats_famm, stats_fui, elapsed_time, Y_mat, sample_data, b_hat, ci, data, fit_pffr, fit_bayes, stats_bayes)
-      } else {
-        ret =
-          stats_famm %>%
-          mutate(type = "FAMM") %>%
-          bind_rows(stats_fui %>% mutate(type = "FUI"))
-        rm(stats_famm, stats_fui, elapsed_time, Y_mat, sample_data, b_hat, ci, data, fit_pffr)
-      }
-      # print(iter)
-      return(ret)
+      write_rds(stats, file = file.path(partial_dir, sprintf("iter_%03d.rds", iter)))
+
     })
-    x
-  },
-  .options = furrr_options(seed = TRUE),
-  .progress = TRUE)
-
-  print(sim_res)
-
-  result =
-    sim_res %>%
-    keep(., is.data.frame) %>%
-    list_rbind(names_to = "iter") %>%
-    select(type, iter, var, everything())
-
-  # check
-  # result %>%
-  #   ggplot(aes(x = var, y = time, color = type)) +
-  #   geom_boxplot()
-  #
-  # result %>%
-  #   pivot_longer(cols = c(MISE, mean_pw_se, cover_pw, time)) %>%
-  #   ggplot(aes(x = var, y = value, color = type)) +
-  #   geom_boxplot(outlier.shape = NA)+
-  #   facet_wrap(.~name, scales = "free_y")
-
-  if (!dir.exists(here::here("results", "simulations", "non_survey"))) {
-    dir.create(here::here("results", "simulations", "non_survey"), recursive = TRUE)
+    rm(x)
+    print(iter)
   }
 
-  write_rds(result,
-            here::here("results", "simulations", "non_survey", fname))
+
+  partial_files = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$", full.names = TRUE)
+
+  sim_res = map(partial_files, read_rds) %>%
+    keep(., is.data.frame) %>%
+    list_rbind(names_to = "id")
+
+  write_rds(sim_res, file = outfile)
+
+
+  unlink(partial_dir, recursive = TRUE)
 }
-plan(sequential)
