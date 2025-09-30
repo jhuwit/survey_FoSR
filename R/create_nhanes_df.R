@@ -1,15 +1,14 @@
 
 library(dplyr)
-library(survey)
 
-df = read_rds(here::here("sim_data", "covariates_accel_mortality_df.rds")) %>%
+df = read_rds(here::here("data", "covariates_accel_mortality_df.rds")) %>%
   mutate(SEQN = as.numeric(SEQN)) %>%
   rename(psu = masked_variance_pseudo_psu,
          strata = masked_variance_pseudo_stratum)
 
 ## functional data
-fnl_data = read_csv(here::here("sim_data", "nhanes_1440_PAXMTSM.csv.xz"))
-inclusion = read_csv(here::here("sim_data", "inclusion_summary.csv.gz"))
+fnl_data = read_csv(here::here("data", "nhanes_1440_PAXMTSM.csv.xz"))
+inclusion = read_csv(here::here("data", "inclusion_summary.csv.gz"))
 
 days_keep =
   inclusion %>%
@@ -42,5 +41,5 @@ pa_df =
          cat_bmi, starts_with("min"))
 
 
-write_rds(pa_df, here::here("sim_data", "pa_df_persub.rds"), compress = "gz")
+write_rds(pa_df, here::here("data", "pa_df_persub.rds"), compress = "gz")
 
