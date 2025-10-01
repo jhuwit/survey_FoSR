@@ -3,55 +3,55 @@
 library(tidyverse)
 library(patchwork)
 library(paletteer)
-source(here::here("R", "create_settings_nonsurvey.R"))
-
+source(here::here("R", "create_nonsurvey_settings.R"))
+force = FALSE
 # paletteer_d("ggthemes::colorblind")
 
 
 col1 = "#D55E00FF"
 col2 = "#0072B2FF"
 
-sim_res_fui = list.files(here::here("results", "simulations", "non_survey3"),
-                     full.names = TRUE, recursive = TRUE)
+if(!file.exists(here::here("results", "simulations", "all_nonsurvey_sim_res.rds")) || force){
+  sim_res_fui = list.files(here::here("results", "simulations", "non_survey3"),
+                           full.names = TRUE, recursive = TRUE)
 
 
-sim_res_famm = list.files(here::here("results", "simulations", "non_survey2"),
-                         full.names = TRUE, recursive = TRUE)
+  sim_res_famm = list.files(here::here("results", "simulations", "non_survey"),
+                            full.names = TRUE, recursive = TRUE)
 
 
 
-process_one_file = function(file){
-  x = read_rds(file)
-  xfold = as.numeric(sub(".*fold\\_(.+).rds.*", "\\1", basename(file)))
-  settings = sim_settings %>% filter(fold == xfold)
+  process_one_file = function(file){
+    x = read_rds(file)
+    xfold = as.numeric(sub(".*fold\\_(.+).rds.*", "\\1", basename(file)))
+    settings = sim_settings %>% filter(fold == xfold)
 
-  x %>%
-    mutate(scen = settings$scenario,
-           n = settings$n,
-           B = settings$num_boots,
-           L = settings$L,
-           family = settings$family,
-           sigma = settings$sigma,
-           fold = xfold) %>%
-    select(scen, n, L, family, sigma, fold, everything())
-}
+    x %>%
+      mutate(scen = settings$scenario,
+             n = settings$n,
+             B = settings$num_boots,
+             L = settings$L,
+             family = settings$family,
+             sigma = settings$sigma,
+             fold = xfold) %>%
+      select(scen, n, L, family, sigma, fold, everything())
+  }
 
-if(!file.exists(here::here("results", "simulations", "all_non_survey3.rds"))){
   all_res_famm = map_dfr(sim_res_famm,
-                    process_one_file) %>%
+                         process_one_file) %>%
     filter(type == "FAMM")
 
   all_res_fui = map_dfr(sim_res_fui,
-                         process_one_file)
+                        process_one_file)
 
   all_res =
     bind_rows(all_res_famm, all_res_fui)
-  write_rds(all_res, here::here("results", "simulations", "all_non_survey3.rds"))
-
-
+  write_rds(all_res, here::here("results", "simulations", "all_nonsurvey_sim_res.rds"))
 } else{
-  all_res = read_rds(here::here("results", "simulations", "all_non_survey3.rds"))
+  all_res = read_rds(here::here("results", "simulations", "all_nonsurvey_sim_res.rds"))
 }
+
+
 
 all_res =
   all_res %>%
