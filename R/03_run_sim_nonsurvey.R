@@ -39,11 +39,12 @@ if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to f
   temp = sim_settings %>% filter(fold == ifold) # set settings for this simulation
 
   # check for completed iters
-  completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
-    str_extract("\\d+") %>%
-    as.integer()
+
 
   for (iter in 1:nsim) {
+    completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
+      str_extract("\\d+") %>%
+      as.integer()
     if (iter %in% completed_iters && !force_iter) {
       message("Skipping completed iteration: ", iter)
       next
