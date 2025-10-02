@@ -62,6 +62,10 @@ if (!file.exists(here::here("data", "processed_steps_multilevel.rds")) || force)
     steps %>%
     right_join(include_days, by = c("SEQN", "PAXDAYM"))
 
+  mims_small =
+    mims %>%
+    right_join(include_days, by = c("SEQN", "PAXDAYM"))
+
   wear_small =
     wear %>%
     right_join(include_days, by = c("SEQN", "PAXDAYM"))
@@ -73,6 +77,7 @@ if (!file.exists(here::here("data", "processed_steps_multilevel.rds")) || force)
   # get rid of steps minutes that are nonwear OR flagged
   wear_mat = wear_small %>% select(starts_with("min")) %>% as.matrix()
   flag_mat = flags_small %>% select(starts_with("min")) %>% as.matrix()
+  mims_mat = mims_small %>% select(starts_with("min")) %>% as.matrix()
   steps_mat = steps_small %>% select(starts_with("min")) %>% as.matrix()
 
   wear_mat_lgl = matrix(wear_mat == 3,
@@ -82,28 +87,54 @@ if (!file.exists(here::here("data", "processed_steps_multilevel.rds")) || force)
   ## replace entries in mims mat with NA if flag is TRUE
   steps_mat_filt2 = ifelse(flag_mat, NA, steps_mat_filt)
 
+  mims_mat_filt = ifelse(wear_mat_lgl, NA, mims_mat)
+  mims_mat_filt2 = ifelse(flag_mat, NA, mims_mat_filt)
+
   steps_final =
     steps_small %>%
     select(-starts_with("min")) %>%
     bind_cols(steps_mat_filt2)
 
+  mims_final =
+    mims_small %>%
+    select(-starts_with("min")) %>%
+    bind_cols(mims_mat_filt2)
+
 
   write_rds(steps_final, here::here("data", "processed_steps_multilevel.rds"))
+  write_rds(mims_final, here::here("data", "processed_mims_multilevel.rds"))
+
 } else {
   steps_final = read_rds(here::here("data", "processed_steps_multilevel.rds"))
+  mims_final = read_rds(here::here("data", "processed_mims_multilevel.rds"))
+
 }
 
-
+mims_persub =
+  mims_final %>%
+  group_by(SEQN) %>%
+  summarize(across(starts_with("min"), ~mean(.x, na.rm = TRUE)), .groups = "drop")
 
 steps_persub =
   steps_final %>%
   group_by(SEQN) %>%
-  summarize(across(starts_with("min"), ~mean(.x, na.rm = TRUE)),
-            .groups = "drop")
+  summarize(across(starts_with("min"), ~mean(.x, na.rm = TRUE)), .groups = "drop")
 
 # write_rds(steps_persub, here::here("data", "processed_steps_sl.rds"))
 # steps_persub = read_rds(here::here("data", "processed_steps_sl.rds"))
 covars = read_rds(here::here("data", "covariates_accel_mortality_df.rds"))
+
+pa_df_persub =
+  mims_persub %>% mutate(SEQN = as.character(SEQN)) %>%
+  left_join(covars, by = "SEQN") %>%
+  rename(psu = masked_variance_pseudo_psu,
+         strata = masked_variance_pseudo_stratum) %>%
+  select(SEQN, data_release_cycle, psu, strata,
+       gender, age_in_years_at_screening, full_sample_2_year_interview_weight,
+       full_sample_2_year_mec_exam_weight,
+       cat_bmi, starts_with("min\\_"))
+
+write_rds(pa_df_persub, here::here("data", "mims_covariates.rds"))
 
 
 covars_filt = covars %>%

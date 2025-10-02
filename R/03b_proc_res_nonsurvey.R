@@ -1,4 +1,5 @@
 # getremote survey_FoSR/results/simulations/non_survey3/*.rds results/simulations/non_survey3/
+# getremote survey_FoSR/results/simulations/non_survey2/*.rds results/simulations/non_survey/
 
 library(tidyverse)
 library(patchwork)
@@ -14,11 +15,11 @@ col2 = "#0072B2FF"
 if(!file.exists(here::here("results", "simulations", "all_nonsurvey_sim_res.rds")) || force){
   sim_res_fui = list.files(here::here("results", "simulations", "non_survey3"),
                            full.names = TRUE, recursive = TRUE)
+  sim_res_fui = sim_res_fui[!grepl("partial", sim_res_fui)]
 
 
   sim_res_famm = list.files(here::here("results", "simulations", "non_survey"),
                             full.names = TRUE, recursive = TRUE)
-
 
 
   process_one_file = function(file){

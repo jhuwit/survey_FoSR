@@ -431,9 +431,102 @@ get_cis = function(betaTilde_boot,
   # smooth
 
 
+  # for (b in 1:B) {
+  #   betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
+  #     gam(x ~ s(
+  #       argvals, bs = "tp", k = (nknots + 1)
+  #     ), method = "GCV.Cp")$fitted.values))
+  # }
+
   for (b in 1:B) {
     betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
-      gam(x ~ s(
+      bam(x ~ s(
+        argvals, bs = "tp", k = (nknots + 1)
+      ), method = "GCV.Cp")$fitted.values))
+  }
+
+  for (r in 1:nrow(betaHat)) {
+    if (smooth_for_variance) {
+      betaHat.var[, , r] <- mult_fac * var(t(betaHat_boot[r, , ]))
+    } else{
+      betaHat.var[, , r] <- mult_fac * var(t(betaTilde_boot[r, , ]))
+    }
+  }
+
+  N <- 10000
+  qn <- rep(0, length = nrow(betaHat))
+  set.seed(456)
+  for (i in 1:length(qn)) {
+    if (smooth_for_ci) {
+      est_bs <- t(betaHat_boot[i, , ])
+    } else{
+      est_bs <- t(betaTilde_boot[i, , ])
+    }
+    fit_fpca <- suppressWarnings(refund::fpca.face(est_bs, knots = nknots_fpca)) # suppress sqrt(Eigen$values) NaNs
+    ## extract estimated eigenfunctions/eigenvalues
+    phi <- fit_fpca$efunctions
+    lambda <- fit_fpca$evalues
+    K <- length(fit_fpca$evalues)
+
+    ## simulate random coefficients
+    theta <- matrix(stats::rnorm(N * K), nrow = N, ncol = K) # generate independent standard normals
+    if (K == 1) {
+      theta <- theta * sqrt(lambda) # scale to have appropriate variance
+      X_new <- tcrossprod(theta, phi) # simulate new functions
+    } else{
+      theta <- theta %*% diag(sqrt(lambda)) # scale to have appropriate variance
+      X_new <- tcrossprod(theta, phi) # simulate new functions
+    }
+    x_sample <- X_new + t(fit_fpca$mu %o% rep(1, N)) # add back in the mean function
+    Sigma_sd <- Rfast::colVars(x_sample, std = TRUE, na.rm = FALSE) # standard deviation: apply(x_sample, 2, sd)
+    x_mean <- colMeans(est_bs)
+    # x_sample: N x p matrix
+    # x_mean: length-p vector
+    # Sigma_sd: length-p vector
+
+    # Vectorized computation
+    z <- sweep(x_sample, 2, x_mean, "-")     # center
+    z <- sweep(z, 2, Sigma_sd, "/")          # standardize
+    un <- apply(abs(z), 1, max)              # row-wise max of absolute values
+
+    qn[i] <- stats::quantile(un, 0.95)
+  }
+
+  return(list(
+    betaHat = betaHat,
+    betaHat.var = betaHat.var,
+    qn = qn
+  ))
+
+}
+get_cis_bam = function(betaTilde_boot,
+                   betaHat,
+                   smooth_for_ci = TRUE,
+                   smooth_for_variance = TRUE,
+                   L,
+                   nknots_min = NULL,
+                   nknots_min_cov = 35,
+                   mult_fac = 1.2) {
+  argvals = 1:L
+  B = ncol(betaTilde_boot[1, , ])
+  nknots <- min(round(L / 2), nknots_min)
+  nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
+  nknots_fpca <- min(round(L / 2), 35)
+  betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
+  betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
+  # smooth
+
+
+  # for (b in 1:B) {
+  #   betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
+  #     gam(x ~ s(
+  #       argvals, bs = "tp", k = (nknots + 1)
+  #     ), method = "GCV.Cp")$fitted.values))
+  # }
+
+  for (b in 1:B) {
+    betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
+      bam(x ~ s(
         argvals, bs = "tp", k = (nknots + 1)
       ), method = "GCV.Cp")$fitted.values))
   }
@@ -503,6 +596,8 @@ get_coverage_stats = function(mod_output, beta_true, name, L){
 
   cover_joint <- logical(nrow(beta_true))  # Using logical instead of NA-filled vector
   cover_pw <- matrix(FALSE, nrow(beta_true), L)
+  cover_pwj <- matrix(FALSE, nrow(beta_true), L)
+
 
   # Extract the diagonal elements of each variance matrix upfront
   sqrt_diag_var <- apply(mod_output$betaHat.var, 3, function(mat) sqrt(diag(mat)))
@@ -529,6 +624,8 @@ get_coverage_stats = function(mod_output, beta_true, name, L){
 
     cover_joint[p] <- all(covered)  # Joint coverage check
     cover_pw[p, ] <- covered_pw     # Assign logical vector directly
+    cover_pwj[p, ] <- covered   # Assign logical vector directly
+
   }
 
   tibble(
@@ -537,6 +634,7 @@ get_coverage_stats = function(mod_output, beta_true, name, L){
     mean_pw_se = mean_pw_se,
     cover_joint = cover_joint,
     cover_pw = rowSums(cover_pw),
+    cover_pwj = rowSums(cover_pwj),
     var = rownames(beta_true),
     boot_type = name)
 }
@@ -631,5 +729,272 @@ pffrcoef_to_tf = function(coef) {
     select(coef = value, se)
 
   coef
+
+}
+
+
+
+## extra
+sample_data <- function(df) {
+  strata = psu = NULL
+  rm(list = c("strata", "psu"))
+  df %>% dplyr::group_by(strata) %>%
+    dplyr::summarize(psu = sample(psu, size = 1), .groups = "drop")
+}
+run_boots <- function(data,  weights = NULL, boot_type,
+                      family = "gaussian", num_boots = 500,
+                      seed = 2025, samp_method_by_stage = NULL,
+                      parallel = FALSE, n_cores = NULL, model_formula = as.formula(paste0('Y~', 'X'))) {
+
+
+  if (!all(samp_method_by_stage %in% c("SRSWR", "SRSWOR", "PPSWR",
+                                       "PPSWOR", "POISSON"))) {
+    stop("Each element of `samp_method_by_stage` must be one of the following: \"SRSWR\", \"SRSWOR\", \"PPSWR\", \"PPSWOR\", or \"Poisson\"")
+  }
+
+  if (!(boot_type %in% c("BRR", "RWYB", "weighted", "unweighted"))) {
+    stop("boot_type must be one of 'BRR', 'RWYB', 'weighted', 'unweighted'")
+  }
+  data = data %>%
+    mutate(row_id = row_number())
+  out_index <- grep(paste0("^", model_formula[2]), names(data))
+  Y_mat <- as.matrix(data[, out_index])
+  X_base <- model.matrix(stats::as.formula(paste0("~", model_formula[3])), data = data)
+
+  if (is.character(family)) {
+    family <- get(family, mode = "function", envir = parent.frame())()
+  }
+
+
+  # ----- coefficient function to get coefficients given X, Y, w -----
+  coef_fun <- function(X_tmp, Y_tmp, w_tmp = NULL) {
+    if (family$family == "gaussian") {
+      lm_wls_multi(X_tmp, Y_tmp, w = w_tmp)
+    } else {
+      glm_batch_multiY(X = X_tmp, Y = Y_tmp, w = w_tmp, family = family,
+                       add_intercept = FALSE)$coef
+    }
+  }
+
+  set.seed(seed)
+  # initalize array to store matrices
+  betaTilde_boot <- NULL
+  n = nrow(data)
+
+  if (parallel) {
+    if (is.null(n_cores)) {
+      n_cores <- parallelly::availableCores() - 1
+      message("using ", n_cores, " cores for parallelization")
+    }
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = n_cores)
+
+    lapply_fn <- function(X, FUN) {
+      progressr::handlers("cli")
+      progressr::with_progress({
+        p <- progressr::progressor(along = X)
+        future.apply::future_lapply(X, function(xx) {
+          res <- FUN(xx)
+          p()   # tick progress bar
+          res
+        }, future.seed = TRUE)
+      })
+    }
+  } else {
+    lapply_fn <- function(X, FUN) {
+      pb <- progress::progress_bar$new(
+        format = "[:bar] :percent eta: :eta",
+        total = length(X),
+        clear = FALSE, width = 60
+      )
+      lapply(X, function(xx) {
+        res <- FUN(xx)
+        pb$tick()
+        res
+      })
+    }
+  }
+
+
+  # # parallel options
+  # if (parallel) {
+  #   if (is.null(n_cores)) {
+  #     n_cores <- parallelly::availableCores() - 1
+  #     message("using ", n_cores, " cores for parallelization")
+  #   }
+  #   old_plan <- future::plan()
+  #   on.exit(future::plan(old_plan), add = TRUE)
+  #   future::plan(future::multisession, workers = n_cores)
+  #   lapply_fn <- function(X, FUN) {
+  #     future.apply::future_lapply(X, FUN, future.seed = TRUE)
+  #   }
+  # } else {
+  #   lapply_fn <- lapply
+  # }
+
+  # ----- generate bootstrap indices or weights -----
+  if (boot_type %in% c("weighted", "unweighted")) {
+    # Determine the weight vector
+    if (is.null(weights) & boot_type == "weighted") {
+      stop("Weighted bootstrap requires a weight vector")
+    } else if (is.null(weights) & boot_type == "unweighted") {
+      weights <- rep(1, n)
+    }
+    assertthat::assert_that(is.numeric(weights), length(weights) == n, msg = "weights must be numeric with length `n`")
+    assertthat::assert_that(all(weights > 0), sum(is.na(weights)) == 0, msg = "weights must be positive and non-missing")
+
+    # create probability vector for sampling
+    probs <- if (boot_type == "weighted") weights / sum(weights) else NULL
+
+    # generate bootstrap indices
+    boot_indices <- replicate(
+      num_boots,
+      sample(seq_len(nrow(data)), size = nrow(data), replace = TRUE, prob = probs),
+      simplify = FALSE
+    )
+
+    coefs <- lapply_fn(boot_indices, function(idx) {
+      X_tmp <- X_base[idx, , drop = FALSE]
+      Y_tmp <- Y_mat[idx, , drop = FALSE]
+      w_tmp <- if (!is.null(probs)) weights[idx] else NULL   # use weights if weighted otherwise unweighted
+      coef_fun(X_tmp, Y_tmp, w_tmp)
+    })
+
+    betaTilde_boot <- simplify2array(coefs)
+  }
+
+  else if (boot_type == "BRR") {
+    # Validate BRR setup
+    if (!all(c("strata", "psu", "weight") %in% colnames(data))) stop("BRR requires strata, psu, weight")
+    strata_counts <- data %>% dplyr::group_by(strata) %>%
+      dplyr::summarize(n_psu = length(unique(psu)), .groups = "drop")
+    if (any(strata_counts$n_psu != 2)) warning("Each strata should have exactly 2 PSUs for BRR")
+
+    indices <- replicate(num_boots, sample_data(data), simplify = FALSE)
+
+    coefs <- lapply_fn(indices, function(idx_df) {
+      dat_tmp <- data %>% dplyr::inner_join(idx_df, by = c("psu", "strata")) %>%
+        dplyr::mutate(weight = weight * 2)
+      X_tmp <- X_base[dat_tmp$row_id, , drop = FALSE]
+      Y_tmp <- Y_mat[dat_tmp$row_id, , drop = FALSE]
+      coef_fun(X_tmp, Y_tmp, dat_tmp$weight)
+    })
+    betaTilde_boot <- simplify2array(coefs)
+  }
+
+  else if (boot_type == "RWYB") {
+    if (!all(c("strata", "psu", "weight", "p_stage1", "p_stage2") %in% colnames(data))) {
+      stop("RWYB bootstrap requires strata, psu, weight, p_stage1, p_stage2")
+    }
+    if (is.null(samp_method_by_stage)) stop("Specify samp_method_by_stage")
+    if (!("id" %in% colnames(data))) {
+      data <- data %>% dplyr::mutate(id = dplyr::row_number())
+      message("Creating 'id' column for data")
+    }
+
+    svy_design <- survey::svydesign(ids = ~ psu + id, strata = ~ strata,
+                                    weights = ~ weight, data = data, nest = TRUE)
+    rwyb_wts <- svrep::make_rwyb_bootstrap_weights(
+      num_replicates = num_boots,
+      samp_unit_ids = svy_design$cluster,
+      strata_ids = svy_design$strata,
+      samp_unit_sel_probs = matrix(c(data$p_stage1, data$p_stage2), ncol = 2),
+      samp_method_by_stage = samp_method_by_stage,
+      allow_final_stage_singletons = TRUE,
+      output = "weights"
+    )
+
+    coefs <- lapply_fn(seq_len(num_boots), function(r) {
+      coef_fun(X_base, Y_mat, rwyb_wts[, r])
+    })
+    betaTilde_boot <- simplify2array(coefs)
+  }
+
+  betaTilde_boot
+}
+
+
+bs = "cr"
+k = 15
+get_cis = function(betaTilde_boot,
+                   betaHat,
+                   smooth_for_ci = TRUE,
+                   smooth_for_variance = TRUE,
+                   L,
+                   nknots_min = NULL,
+                   nknots_min_cov = 35,
+                   mult_fac = 1.2,
+                   conf_level = 0.95,
+                   splines = "tp") {
+  argvals = 1:L
+  B <- dim(betaTilde_boot)[3]
+  nknots <- if (is.null(nknots_min)) round(L / 2) else min(round(L / 2), nknots_min)
+
+  nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
+  nknots_fpca <- min(round(L / 2), 35)
+  betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
+  betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
+  # smooth
+
+
+  for (b in 1:B) {
+    betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
+      mgcv::gam(x ~ s(
+        argvals, bs = splines, k = (nknots + 1)
+      ), method = "GCV.Cp")$fitted.values))
+  }
+
+  for (r in 1:nrow(betaHat)) {
+    if (smooth_for_variance) {
+      betaHat.var[, , r] <- mult_fac * var(t(betaHat_boot[r, , ]))
+    } else{
+      betaHat.var[, , r] <- mult_fac * var(t(betaTilde_boot[r, , ]))
+    }
+  }
+
+  N <- 10000
+  qn <- rep(0, length = nrow(betaHat))
+  set.seed(456)
+  for (i in 1:length(qn)) {
+    if (smooth_for_ci) {
+      est_bs <- t(betaHat_boot[i, , ])
+    } else{
+      est_bs <- t(betaTilde_boot[i, , ])
+    }
+    fit_fpca <- suppressWarnings(refund::fpca.face(est_bs, knots = nknots_fpca)) # suppress sqrt(Eigen$values) NaNs
+    ## extract estimated eigenfunctions/eigenvalues
+    phi <- fit_fpca$efunctions
+    lambda <- fit_fpca$evalues
+    K <- length(fit_fpca$evalues)
+
+    ## simulate random coefficients
+    theta <- matrix(stats::rnorm(N * K), nrow = N, ncol = K) # generate independent standard normals
+    if (K == 1) {
+      theta <- theta * sqrt(lambda) # scale to have appropriate variance
+      X_new <- tcrossprod(theta, phi) # simulate new functions
+    } else{
+      theta <- theta %*% diag(sqrt(lambda)) # scale to have appropriate variance
+      X_new <- tcrossprod(theta, phi) # simulate new functions
+    }
+    x_sample <- X_new + t(fit_fpca$mu %o% rep(1, N)) # add back in the mean function
+    Sigma_sd <- Rfast::colVars(x_sample, std = TRUE, na.rm = FALSE) # standard deviation: apply(x_sample, 2, sd)
+    x_mean <- colMeans(est_bs)
+    # x_sample: N x p matrix
+    # x_mean: length-p vector
+    # Sigma_sd: length-p vector
+
+    # Vectorized computation
+    z <- sweep(x_sample, 2, x_mean, "-")     # center
+    z <- sweep(z, 2, Sigma_sd, "/")          # standardize
+    un <- apply(abs(z), 1, max)              # row-wise max of absolute values
+
+    qn[i] <- stats::quantile(un, conf_level)
+  }
+
+  return(list(
+    betaHat.var = betaHat.var,
+    qn = qn
+  ))
 
 }

@@ -73,7 +73,7 @@ run_one_simulation = function(iter){
 
   res = map(
     .x = boot_types,
-    .f = run_boots_fast,
+    .f = run_boots_xfast,
     betaHat = betaHat[[1]],
     # don't actually use betahat in calculation so we can just use the weighted one
     data = ss_data,
