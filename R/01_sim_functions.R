@@ -74,14 +74,19 @@ get_betatilde = function(data, family = "gaussian", type = "weighted",
   return(betaTilde)
 }
 
+
+
+
+
 get_betahat = function(betaTilde, L,
-                       nknots_min = NULL){
+                       nknots_min = NULL,
+                       splines = "tp"){
   argvals = 1:L
   # nknots <- min(round(L / 2), nknots_min)
   nknots <- if (is.null(nknots_min)) round(L / 2) else min(round(L / 2), nknots_min)
 
 
-  betaHat <- t(apply(betaTilde, 1, function(x) mgcv::gam(x ~ s(argvals, bs = "tp",
+  betaHat <- t(apply(betaTilde, 1, function(x) mgcv::gam(x ~ s(argvals, bs = splines,
                                                                k = (nknots + 1)),
                                                          method = "GCV.Cp")$fitted.values))
   # bh <- t(apply(bt, 1, function(x) mgcv::gam(x ~ s(argvals, bs = "tp",
@@ -95,6 +100,8 @@ get_betahat = function(betaTilde, L,
 
 lm_wls_multi <- function(X, Y, w) {
   # X: (n × p), Y: (n × L), w: (n)
+  n = nrow(X)
+  if (is.null(w)) w = rep(1, n)
   W_half <- sqrt(w)
   Xw <- X * W_half
   Yw <- Y * W_half
@@ -420,12 +427,13 @@ get_cis = function(betaTilde_boot,
                    L,
                    nknots_min = NULL,
                    nknots_min_cov = 35,
+                   nknots_fpca = 35,
                    mult_fac = 1.2) {
   argvals = 1:L
   B = ncol(betaTilde_boot[1, , ])
   nknots <- min(round(L / 2), nknots_min)
   nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
-  nknots_fpca <- min(round(L / 2), 35)
+  nknots_fpca <- min(round(L / 2), nknots_fpca)
   betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
   betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
   # smooth
@@ -748,7 +756,7 @@ run_boots <- function(data,  weights = NULL, boot_type,
 
 
   if (!all(samp_method_by_stage %in% c("SRSWR", "SRSWOR", "PPSWR",
-                                       "PPSWOR", "POISSON"))) {
+                                       "PPSWOR", "Poisson"))) {
     stop("Each element of `samp_method_by_stage` must be one of the following: \"SRSWR\", \"SRSWOR\", \"PPSWR\", \"PPSWOR\", or \"Poisson\"")
   }
 
@@ -771,8 +779,8 @@ run_boots <- function(data,  weights = NULL, boot_type,
     if (family$family == "gaussian") {
       lm_wls_multi(X_tmp, Y_tmp, w = w_tmp)
     } else {
-      glm_batch_multiY(X = X_tmp, Y = Y_tmp, w = w_tmp, family = family,
-                       add_intercept = FALSE)$coef
+      glm_batch_multiY(X = X_tmp, y_mat = Y_tmp, w = w_tmp, family = family,
+                       add_intercept = FALSE, return_se = FALSE)$coef
     }
   }
 
@@ -816,29 +824,12 @@ run_boots <- function(data,  weights = NULL, boot_type,
     }
   }
 
-
-  # # parallel options
-  # if (parallel) {
-  #   if (is.null(n_cores)) {
-  #     n_cores <- parallelly::availableCores() - 1
-  #     message("using ", n_cores, " cores for parallelization")
-  #   }
-  #   old_plan <- future::plan()
-  #   on.exit(future::plan(old_plan), add = TRUE)
-  #   future::plan(future::multisession, workers = n_cores)
-  #   lapply_fn <- function(X, FUN) {
-  #     future.apply::future_lapply(X, FUN, future.seed = TRUE)
-  #   }
-  # } else {
-  #   lapply_fn <- lapply
-  # }
-
   # ----- generate bootstrap indices or weights -----
   if (boot_type %in% c("weighted", "unweighted")) {
     # Determine the weight vector
     if (is.null(weights) & boot_type == "weighted") {
       stop("Weighted bootstrap requires a weight vector")
-    } else if (is.null(weights) & boot_type == "unweighted") {
+    } else if (boot_type == "unweighted") {
       weights <- rep(1, n)
     }
     assertthat::assert_that(is.numeric(weights), length(weights) == n, msg = "weights must be numeric with length `n`")
@@ -915,35 +906,68 @@ run_boots <- function(data,  weights = NULL, boot_type,
 }
 
 
-bs = "cr"
-k = 15
-get_cis = function(betaTilde_boot,
+
+get_cis_par = function(betaTilde_boot,
                    betaHat,
                    smooth_for_ci = TRUE,
                    smooth_for_variance = TRUE,
                    L,
                    nknots_min = NULL,
                    nknots_min_cov = 35,
+                   nknots_min_fpca = 35,
                    mult_fac = 1.2,
                    conf_level = 0.95,
-                   splines = "tp") {
-  argvals = 1:L
-  B <- dim(betaTilde_boot)[3]
-  nknots <- if (is.null(nknots_min)) round(L / 2) else min(round(L / 2), nknots_min)
-
-  nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
-  nknots_fpca <- min(round(L / 2), 35)
+                   splines = "tp",
+                   parallel = TRUE,
+                   n_cores = NULL) {
+  B = ncol(betaTilde_boot[1, , ])
+  nknots <- min(round(L / 2), nknots_min)
+  nknots_fpca <- min(round(L / 2), nknots_min_fpca)
   betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
   betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
-  # smooth
+  argvals = seq_len(L)
+  if (parallel) {
+    if (is.null(n_cores)) {
+      n_cores <- parallelly::availableCores() - 1
+      message("using ", n_cores, " cores for smoothing")
+    }
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = n_cores)
 
-
-  for (b in 1:B) {
-    betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
-      mgcv::gam(x ~ s(
-        argvals, bs = splines, k = (nknots + 1)
-      ), method = "GCV.Cp")$fitted.values))
+    lapply_fn <- function(X, FUN) {
+      progressr::handlers("cli")
+      progressr::with_progress({
+        p <- progressr::progressor(along = X)
+        future.apply::future_lapply(X, function(xx) {
+          res <- FUN(xx)
+          p()
+          res
+        }, future.seed = TRUE)
+      })
+    }
+  } else {
+    lapply_fn <- function(X, FUN) {
+      pb <- progress::progress_bar$new(
+        format = "[:bar] :percent eta: :eta",
+        total = length(X),
+        clear = FALSE, width = 60
+      )
+      lapply(X, function(xx) {
+        res <- FUN(xx)
+        pb$tick()
+        res
+      })
+    }
   }
+
+  res_list <- lapply_fn(seq_len(B), function(b) {
+    t(apply(betaTilde_boot[, , b], 1, function(x) {
+      mgcv::gam(x ~ s(argvals, bs = "tp", k = (nknots + 1)), method = "GCV.Cp")$fitted.values
+    }))
+  })
+
+  betaHat_boot = simplify2array(res_list)
 
   for (r in 1:nrow(betaHat)) {
     if (smooth_for_variance) {
@@ -993,8 +1017,41 @@ get_cis = function(betaTilde_boot,
   }
 
   return(list(
+    betaHat = betaHat,
     betaHat.var = betaHat.var,
     qn = qn
   ))
 
+}
+
+get_betatilde = function(data, family = "gaussian", type = "weighted",
+                         model_formula = as.formula(paste0('Y~', 'X'))){
+  if(!(type %in% c("weighted", "unweighted"))){
+    stop("please specify boot_type as one of 'weighted', 'unweighted'")
+  }
+
+  out_index <- grep(paste0("^", model_formula[2]), names(data))
+  Y_mat <- as.matrix(data[, out_index])
+  X_base <- model.matrix(stats::as.formula(paste0("~", model_formula[3])), data = data)
+
+  if (is.character(family)) {
+    family <- get(family, mode = "function", envir = parent.frame())()
+  }
+
+  if(type == "weighted") {
+    w_tmp = data$weight
+  } else {
+    w_tmp = NULL
+  }
+
+  if (family$family == "gaussian") {
+    coefs = lm_wls_multi(X_base, Y_mat, w = w_tmp)
+  } else {
+    coefs = glm_batch_multiY(X = X_base, y_mat = Y_mat, w = w_tmp, family = family,
+                             add_intercept = FALSE, return_se = FALSE)$coef
+  }
+
+  colnames(coefs) <- seq_len(ncol(Y_mat))
+
+  return(coefs)
 }

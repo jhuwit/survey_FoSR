@@ -1,11 +1,10 @@
 ## empirical sim
 library(tidyverse)
-source(here::here("R", "01_sim_functions.R"))
+source(here::here("R_cp", "01_sim_functions.R"))
 source(here::here("R", "utils.R"))
 library(future)
 library(furrr)
 force = FALSE
-force_iter = FALSE
 pa_df = read_rds(here::here("data", "mims_covariates.rds"))
 L = 1440
 n_sim = 1000
@@ -16,7 +15,6 @@ nsim = 200
 settings = expand_grid(iter = 1:nsim,
                        weight_type = c("uniform", "nh_weights", "mims_weights", "combo_weights"))
 ifold = get_fold()
-
 weight_curr = settings[ifold,]$weight_type
 iter = settings[ifold,]$iter
 
@@ -25,12 +23,63 @@ outfile = here::here("results", "simulations", "empirical_sim_1440", paste0("fol
 if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to force re-do it
   if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
 
+  fit_types = c('weighted', 'unweighted')
+  boot_types = c('BRR', 'weighted', 'unweighted')
+  options(survey.lonely.psu = "adjust")
 
-run_one_simulation = function(iter){
+
+  means =
+    pa_df %>%
+    pivot_longer(cols = starts_with("min")) %>%
+    group_by(SEQN,
+             data_release_cycle,
+             psu,
+             strata,
+             gender,
+             age = age_in_years_at_screening,
+             weight = full_sample_2_year_mec_exam_weight) %>%
+    summarize(mean_mims = mean(value, na.rm = TRUE), .groups = "drop")
+
+  means =
+    means %>%
+    mutate(weight = weight / 2,
+           weight_sc = scale(weight, center = TRUE, scale = TRUE))
+
+  dat_full = tibble(ID = means$SEQN, X = means$gender)
+
+
+  pa_means =
+    pa_df %>%
+    select(SEQN, starts_with("min"))
+
+  Y = as.matrix(pa_means %>% select(starts_with("min")))
+  colnames(Y) = paste0("Y", 1:L)
+
+  full_data = cbind(dat_full, Y)
+
+
+  if (weight_curr == "uniform") {
+    inclusion_probs = rep(1 / nrow(means), nrow(means)) # uniform sampling
+  } else if (weight_curr == "nh_weights") {
+    incl_score = means$weight_sc
+    score_compressed  = pmax(pmin(incl_score, compression), -1 * compression)
+    inclusion_probs = plogis(score_compressed)
+  } else if (weight_curr == "mims_weights") {
+    incl_score = scale(means$mean_mims, center = TRUE, scale = TRUE)
+    score_compressed  = pmax(pmin(incl_score, compression), -1 * compression)
+    inclusion_probs = plogis(score_compressed)
+  } else if (weight_curr == "combo_weights") {
+    incl_score = (0.5 * means$weight_sc) +
+      (0.5 * scale(means$mean_mims, center = TRUE, scale = TRUE))
+    score_compressed  = pmax(pmin(incl_score, compression), -1 * compression)
+    inclusion_probs = plogis(score_compressed)
+  }
+
+
   pik = sampling::inclusionprobabilities(inclusion_probs, n_sim)
   set.seed(iter)
   ind = as.logical(sampling::UPpoisson(pik))
-  which(ind) %>% length
+  # which(ind) %>% length
 
   means = means %>%
     mutate(p_i = pik)
@@ -50,7 +99,7 @@ run_one_simulation = function(iter){
     )
 
   Y_sample =
-    pa_means_hour %>%
+    pa_means %>%
     filter(SEQN %in% dat_sample$ID) %>%
     select(starts_with("min"))
 
@@ -60,9 +109,8 @@ run_one_simulation = function(iter){
 
   ## fit model on full data to get "true" effect
   bt = get_betatilde(data = full_data, family = "gaussian", type = "unweighted")
-  beta_true = get_betahat(bt, L = L) ## these are the true fns
-  #
-  # bh %>%
+  beta_true = get_betahat(bt, L = L, nknots_min = 15) ## these are the true fns
+  # beta_true %>%
   #   as_tibble() %>%
   #   mutate(type = c("Intercept", "X")) %>%
   #   janitor::clean_names() %>%
@@ -71,7 +119,8 @@ run_one_simulation = function(iter){
   #   ggplot(aes(x = xval, y = value)) +
   #   geom_smooth() +
   #   facet_wrap(.~type, scales = "free_y")
-  ## now fit on sample
+
+
   betaTilde = map(
     .x = fit_types,
     .f = get_betatilde,
@@ -79,25 +128,7 @@ run_one_simulation = function(iter){
     family = "gaussian"
   )
 
-  betaHat = map(.x = betaTilde, get_betahat, L = L)
-
-
-  res = map(
-    .x = boot_types,
-    .f = run_boots_xfast,
-    betaHat = betaHat[[1]],
-    # don't actually use betahat in calculation so we can just use the weighted one
-    data = ss_data,
-    family = "gaussian",
-    num_boots = n_boot,
-    seed = 2025,
-    L = L,
-    samp_stages = c("Poisson")
-  )
-  x = run_boots(data = ss_data, weights = ss_data$weight, family = "gaussian", num_boots = n_boot, seed = 2025,
-             boot_type = "BRR", parallel = TRUE, n_cores = 6)
-  ci = get_cis_bam(x, betaHat[[1]], L=1440, smooth_for_ci = TRUE)
-  ci = get_cis(x, betaHat[[1]], L=1440, smooth_for_ci = TRUE, nknots_min =15, splines = "cr")
+  betaHat = map(.x = betaTilde, get_betahat, L = L, nknots_min = 15)
 
 
   res = map(
@@ -108,18 +139,23 @@ run_one_simulation = function(iter){
     family = "gaussian",
     num_boots = n_boot,
     seed = 2025,
-    L = L,
-    samp_stages = c("Poisson")
+    parallel = TRUE,
+    n_cores = parallelly::availableCores() -1
   )
+
 
   fit_list = list(betaHat[[1]], betaHat[[1]], betaHat[[2]])
 
   cis = map2(
     .x = res,
     .y = fit_list,
-    .f = get_cis_bam,
+    .f = get_cis_par,
     L = L,
-    smooth_for_ci = TRUE
+    smooth_for_ci = TRUE,
+    nknots_min = 15,
+    nknots_min_fpca = 15,
+    parallel = TRUE,
+    n_cores = parallelly::availableCores() -1
   )
 
   stats = map2(
@@ -130,82 +166,11 @@ run_one_simulation = function(iter){
     L = L
   ) %>%
     list_rbind() %>%
-    mutate(n = nrow(data))
-
-  stats
-}
-
-fit_types = c('weighted', 'unweighted')
-boot_types = c('BRR', 'weighted', 'unweighted')
-options(survey.lonely.psu = "adjust")
-
-
-means =
-  pa_df %>%
-  pivot_longer(cols = starts_with("min")) %>%
-  group_by(SEQN,
-           data_release_cycle,
-           psu,
-           strata,
-           gender,
-           age = age_in_years_at_screening,
-           weight = full_sample_2_year_mec_exam_weight) %>%
-  summarize(mean_mims = mean(value, na.rm = TRUE), .groups = "drop")
-
-means =
-  means %>%
-  mutate(weight = weight / 2,
-         weight_sc = scale(weight, center = TRUE, scale = TRUE))
-
-dat_full = tibble(ID = means$SEQN, X = means$gender)
-
-
-pa_means =
-  pa_df %>%
-  select(SEQN, starts_with("min"))
-
-Y = as.matrix(pa_means %>% select(starts_with("min")))
-colnames(Y) = paste0("Y", 1:L)
-
-full_data = cbind(dat_full, Y)
-
-
-if (weight_curr == "uniform") {
-  inclusion_probs = rep(1 / nrow(means), nrow(means)) # uniform sampling
-} else if (weight_curr == "nh_weights") {
-  incl_score = means$weight_sc
-  score_compressed  = pmax(pmin(incl_score, compression), -1 * compression)
-  inclusion_probs = plogis(score_compressed)
-} else if (weight_curr == "mims_weights") {
-  incl_score = scale(means$mean_mims, center = TRUE, scale = TRUE)
-  score_compressed  = pmax(pmin(incl_score, compression), -1 * compression)
-  inclusion_probs = plogis(score_compressed)
-} else if (weight_curr == "combo_weights") {
-  incl_score = (0.5 * means$weight_sc) +
-    (0.5 * scale(means$mean_mims, center = TRUE, scale = TRUE))
-  score_compressed  = pmax(pmin(incl_score, compression), -1 * compression)
-  inclusion_probs = plogis(score_compressed)
-}
-
-  # plan(multisession, workers = parallelly::availableCores() - 1)
+    mutate(n = nrow(data),
+           iter = iter)
 
 
 
-
-
-  sim_res_list = future_map(
-    .x = 1:nsim,
-    .f = run_one_simulation,
-    .options = furrr_options(seed = TRUE)
-  )
-
-
-  sim_res = sim_res_list %>%
-    keep(., is.data.frame) %>%
-    list_rbind(names_to = "id")
-
-  write_rds(sim_res, file = outfile)
-
+    write_rds(stats, file = outfile)
 
 }
-
