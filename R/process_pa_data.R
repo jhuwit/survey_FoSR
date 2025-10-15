@@ -131,27 +131,27 @@ pa_df_persub =
          strata = masked_variance_pseudo_stratum) %>%
   select(SEQN, data_release_cycle, psu, strata,
        gender, age_in_years_at_screening, full_sample_2_year_interview_weight,
-       full_sample_2_year_mec_exam_weight,
-       cat_bmi, starts_with("min\\_"))
+       full_sample_2_year_mec_exam_weight, race_hispanic_origin,
+       cat_bmi, starts_with("min_"))
 
 write_rds(pa_df_persub, here::here("data", "mims_covariates.rds"))
-
-
-covars_filt = covars %>%
-  filter(SEQN %in% steps_persub$SEQN) %>%
-  select(SEQN, data_release_cycle, gender, age_in_years_at_screening, full_sample_2_year_mec_exam_weight,
-         race_hispanic_origin, masked_variance_pseudo_psu, masked_variance_pseudo_stratum,
-         annual_household_income, cat_alcohol, cat_bmi, cat_smoke, bin_mobilityproblem,
-         cat_education, mortstat) %>%
-  left_join(steps_persub %>% mutate(SEQN = as.character(SEQN)), by = "SEQN")
-
-write_rds(covars_filt, here::here("data", "steps_covariates.rds"))
-
 #
-# covars_filt %>%
-#   slice(1:100) %>%
-#   select(SEQN, starts_with("min")) %>%
-#   pivot_longer(cols = starts_with("min")) %>%
-#   mutate(s = as.numeric(sub(".*min\\_", "", name))) %>%
-#   ggplot(aes(x = s, y = value)) +
-#   geom_smooth()
+#
+# covars_filt = covars %>%
+#   filter(SEQN %in% steps_persub$SEQN) %>%
+#   select(SEQN, data_release_cycle, gender, age_in_years_at_screening, full_sample_2_year_mec_exam_weight,
+#          race_hispanic_origin, masked_variance_pseudo_psu, masked_variance_pseudo_stratum,
+#          annual_household_income, cat_alcohol, cat_bmi, cat_smoke, bin_mobilityproblem,
+#          cat_education, mortstat) %>%
+#   left_join(steps_persub %>% mutate(SEQN = as.character(SEQN)), by = "SEQN")
+#
+# write_rds(covars_filt, here::here("data", "steps_covariates.rds"))
+#
+# #
+# # covars_filt %>%
+# #   slice(1:100) %>%
+# #   select(SEQN, starts_with("min")) %>%
+# #   pivot_longer(cols = starts_with("min")) %>%
+# #   mutate(s = as.numeric(sub(".*min\\_", "", name))) %>%
+# #   ggplot(aes(x = s, y = value)) +
+# #   geom_smooth()
