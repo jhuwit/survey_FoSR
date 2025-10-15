@@ -15,11 +15,10 @@ library(gridExtra)
 library(refund)
 library(tidyverse)
 library(parallel)
-source(here::here("R_cp", "sim_functions_unwt.R"))
-source(here::here("R_cp", "01_sim_functions.R"))
-source(here::here("R_cp", "00_data_gen_function_ff.R"))
-source(here::here("R_cp", "create_nonsurvey_settings.R"))
-source(here::here("R_cp", "utils.R"))
+source(here::here("R", "01_sim_functions.R"))
+source(here::here("R", "00_data_gen_function_ff.R"))
+source(here::here("R", "create_nonsurvey_settings.R"))
+source(here::here("R", "utils.R"))
 
 
 force = TRUE
