@@ -27,7 +27,7 @@ if (!file.exists(here::here("results", "simulations", "all_empirical_sim_res.rds
     left_join(settings, by = c("fold" = "rn")) %>%
     rename(setting = weight_type)
 
-  write_rds(res_df, here::here("results", "simulations", "all_empirical_sim_res.rds"))
+  write_rds(res_df, here::here("results", "simulations", "all_empirical_sim_res.rds"), compress = "xz")
 
 } else {
   res_df = read_rds(here::here("results", "simulations", "all_empirical_sim_res.rds"))
