@@ -13,12 +13,7 @@ col1 = "#D55E00FF"
 col2 = "#0072B2FF"
 
 if(!file.exists(here::here("results", "simulations", "all_nonsurvey_sim_res.rds")) || force){
-  sim_res_fui = list.files(here::here("results", "simulations", "non_survey3"),
-                           full.names = TRUE, recursive = TRUE)
-  sim_res_fui = sim_res_fui[!grepl("partial", sim_res_fui)]
-
-
-  sim_res_famm = list.files(here::here("results", "simulations", "non_survey"),
+  sim_res = list.files(here::here("results", "simulations", "non_survey"),
                             full.names = TRUE, recursive = TRUE)
 
 
@@ -38,15 +33,7 @@ if(!file.exists(here::here("results", "simulations", "all_nonsurvey_sim_res.rds"
       select(scen, n, L, family, sigma, fold, everything())
   }
 
-  all_res_famm = map_dfr(sim_res_famm,
-                         process_one_file) %>%
-    filter(type == "FAMM")
-
-  all_res_fui = map_dfr(sim_res_fui,
-                        process_one_file)
-
-  all_res =
-    bind_rows(all_res_famm, all_res_fui)
+  all_res = map_dfr(sim_res, process_one_file)
   write_rds(all_res, here::here("results", "simulations", "all_nonsurvey_sim_res.rds"), compress = "xz")
 } else{
   all_res = read_rds(here::here("results", "simulations", "all_nonsurvey_sim_res.rds"))
