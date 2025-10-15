@@ -36,6 +36,16 @@ naive_fit <- function(X, Y, w) {
   coefs
 }
 
+naive_fit_qr <- function(X, Y, w) {
+  coefs <- matrix(NA, ncol = ncol(Y), nrow = ncol(X))
+  for (l in 1:ncol(Y)) {
+    y = Y[, l]
+    fit <- lm_ls_multi(X, y, w)
+    coefs[, l] <- fit
+  }
+  coefs
+}
+
 
 # ---------------------------
 # Batched: one QR for all Y
@@ -44,6 +54,14 @@ lm_wls_multi <- function(X, Y, w) {
   W_half <- sqrt(w)
   Xw <- X * W_half
   Yw <- Y * W_half
+  qr_decomp <- qr(Xw)
+  qr.coef(qr_decomp, Yw)  # (p × L) matrix
+}
+
+lm_ls_multi <- function(X, y, w) {
+  W_half <- sqrt(w)
+  Xw <- X * W_half
+  Yw <- y * W_half
   qr_decomp <- qr(Xw)
   qr.coef(qr_decomp, Yw)  # (p × L) matrix
 }
@@ -57,6 +75,7 @@ library(microbenchmark)
 res <- microbenchmark(
   naive = naive_fit(X, Y, w),
   batched = lm_wls_multi(X, Y, w),
+  naive_qr = naive_fit_qr(X, Y, w),
   times = 10
 )
 print(res)
