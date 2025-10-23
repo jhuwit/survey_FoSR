@@ -22,7 +22,6 @@ library(svrep)
 
 generate_superpopulation = function(I = 10e6, # size of superpopulation
                                     L = 50, # length of functional domain
-                                    scenario = 1, # shape of function
                                     family = "gaussian",
                                     seed = 4574,
                                     num_strata = 30, # num total strata
@@ -32,13 +31,14 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
                                     snr_b = 1, # signal noise ratio for random to fixed effects
                                     snr_eps = 1 # signal to noise for gaussian
 ){
-  stopifnot("scenario must be either 1 or 2" = scenario %in% c(1, 2),
-            "family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"),
+  stopifnot("family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"),
             "I must be greater than 1000" = I > 1000,
             "I must be greater than or equal to 25" = L >= 25,
             "num_strata must be greater than 0" = num_strata > 0,
             "strata_sigma, psu_factor and strata_scale must be greater than or equal to 0" = all(c(strata_sigma, psu_factor, strata_scale) >= 0),
-            "signal to noise ratios must be greater than 0" = all(c(snr_b, snr_eps) > 0))
+            "signal to noise ratios must be greater than 0" = snr_b > 0 | is.na(snr_b),
+            "signal to noise ratios must be greater than 0" = snr_eps > 0 | is.na(snr_eps))
+
 
   set.seed(seed)
   X_des  = cbind(1, rnorm(I, 0, 2))
@@ -46,15 +46,9 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
   ## simulate true beta based on scenarios
   grid  = seq(0, 1, length = L)
   beta_fixed  = matrix(NA, 2, L)
-  if (scenario == 1){
-    beta_fixed[1, ]  = -0.15 - 0.1 * sin(2 * pi * grid) - 0.1 * cos(2 * pi * grid)
-    beta_fixed[2, ]  = dnorm(grid, 0.6, 0.15) / 20
-    # beta_fixed[2, ]  = dnorm(grid, 0.6, 0.15)
-  } else if(scenario == 2) {
-    beta_fixed[1,]  = 0.53 + 0.06*sin(3*grid*pi) - 0.03*cos(6.5*grid*pi)
-    beta_fixed[2,]  = dnorm(grid, 0.2, .1)/60 + dnorm(grid, 0.35, .1)/200 -
-      dnorm(grid, 0.65, .06)/250 + dnorm(grid, 1, .07)/60
-  }
+  beta_fixed[1, ]  = -0.15 - 0.1 * sin(2 * pi * grid) - 0.1 * cos(2 * pi * grid)
+  beta_fixed[2, ]  = dnorm(grid, 0.6, 0.15) / 20
+
   rownames(beta_fixed)  = c("Intercept", "x")
 
   ## assign individuals to strata

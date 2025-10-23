@@ -1,12 +1,11 @@
 # Generate 'structure' only (no Y_obs)
 get_p_i = function(i, probs) probs[i] * (1 + sum((probs[-i]) / (1-probs[-i])))
 
-generate_population_structure <- function(I = 1e6, L = 50, scenario = 1, family = "gaussian",
+generate_population_structure <- function(I = 1e6, L = 50, family = "gaussian",
                                           seed = 4574, num_strata = 30,
                                           strata_sigma = 0.05, psu_factor = 0.5,
                                           strata_scale = 0.125, snr_b = 1, snr_eps = 1) {
 
-  stopifnot(scenario %in% c(1,2))
   stopifnot(family %in% c("gaussian","poisson","binomial"))
 
   set.seed(seed)
@@ -17,14 +16,9 @@ generate_population_structure <- function(I = 1e6, L = 50, scenario = 1, family 
   # beta fixed
   grid <- seq(0, 1, length = L)
   beta_fixed <- matrix(NA, 2, L)
-  if (scenario == 1) {
-    beta_fixed[1, ] <- -0.15 - 0.1 * sin(2*pi*grid) - 0.1*cos(2*pi*grid)
-    beta_fixed[2, ] <- dnorm(grid, 0.6, 0.15) / 20
-  } else {
-    beta_fixed[1, ] <- 0.53 + 0.06*sin(3*grid*pi) - 0.03*cos(6.5*grid*pi)
-    beta_fixed[2, ] <- dnorm(grid, 0.2, .1)/60 + dnorm(grid, 0.35, .1)/200 -
-      dnorm(grid, 0.65, .06)/250 + dnorm(grid, 1, .07)/60
-  }
+  beta_fixed[1, ] <- -0.15 - 0.1 * sin(2 * pi * grid) - 0.1 * cos(2 * pi * grid)
+  beta_fixed[2, ] <- dnorm(grid, 0.6, 0.15) / 20
+
   rownames(beta_fixed) <- c("Intercept", "x")
 
   # strata sizes (draw exactly as original): dirichlet then sample assignments

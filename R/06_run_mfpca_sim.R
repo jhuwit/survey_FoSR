@@ -22,18 +22,25 @@ force = FALSE
 source(here::here("R_cp", "01_sim_functions.R"))
 source(here::here("R_cp", "00_data_gen_function_ff.R"))
 source(here::here("R", "utils.R"))
-source(here::here("R_cp", "create_survey_settings.R"))
+source(here::here("R_cp", "create_survey_settings_final.R"))
 
 
 ifold = get_fold()
 options(survey.lonely.psu = "adjust")
-nsim = 200
+nsim = 50
 
 
-out_file = here::here("results", "mfpca_sim3", paste0("fold_", sprintf("%03d", ifold), ".rds"))
+out_file = here::here("results", "mfpca_sim", paste0("fold_", sprintf("%03d", ifold), ".rds"))
 if (!dir.exists(dirname(out_file))) dir.create(dirname(out_file))
 
-if (!file.exists(out_file) || force) {
+temp = settings_new[ifold, ] # set settings for this simulation
+
+if (!file.exists(out_file) & temp$len != 1440) {
+
+  partial_dir = here::here("results", "mfpca_sim", paste0("fold_", sprintf("%03d", ifold), "_partials"))
+  if (!dir.exists(partial_dir)) dir.create(partial_dir)
+
+
   print(ifold)
   temp = settings_new[ifold, ] # set settings for this simulation
 
@@ -49,8 +56,17 @@ if (!file.exists(out_file) || force) {
     seed = 111
   )
 
-  xlst = list()
+
   for(iter in 1:nsim){
+    completed_iters = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$") %>%
+      str_extract("\\d+") %>%
+      as.integer()
+
+    if (iter %in% completed_iters && !force_iter) {
+      message("Skipping completed iteration: ", iter)
+      next
+    }
+
     data = sample_from_population_wor(
       X_des = lst$X_des,
       Y_obs = lst$Y_obs,
@@ -104,13 +120,20 @@ if (!file.exists(out_file) || force) {
       tv_bw = total_var_bw,
       tv_win = total_var_win
     )
-    xlst[[iter]] = res
+    write_rds(res, file = file.path(partial_dir, sprintf("iter_%03d.rds", iter)))
     print(iter)
     rm(data, Y_mat, res)
   }
 
-  res = xlst %>% list_rbind()
-  write_rds(res, out_file)
+
+  partial_files = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$", full.names = TRUE)
+
+  sim_res = map(partial_files, \(x) read_rds(x) %>% mutate(id = sub(".*iter_(.+)\\.rds.*", "\\1", basename(x)))) %>%
+    keep(., is.data.frame) %>%
+    list_rbind()
+
+  write_rds(sim_res, file = outfile)
+  unlink(partial_dir, recursive = TRUE)
 
 }
 

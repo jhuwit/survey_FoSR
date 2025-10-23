@@ -128,7 +128,36 @@ extra_rows =
 extra_rows =
   extra_rows %>% mutate(model = "BRR") %>%
   bind_rows(extra_rows %>% mutate(model = "Unweighted")) %>%
-  mutate(modelf = factor(model, levels = c("Unweighted", "BRR")))
+  bind_rows(extra_rows %>% mutate(model = "Weighted")) %>%
+  mutate(modelf = factor(model, levels = c("Unweighted", "Weighted", "BRR")))
+
+df =
+  plt_df_boot %>%
+  bind_rows(.id = "model") %>%
+  as_tibble() %>%
+  filter(model %in% c("1", "2", "3")) %>%
+  mutate(modelf = recode_factor(model,
+                "1" = "BRR",
+                "2" = "Weighted",
+                "3" = "Unweighted")) %>%
+  mutate(name = factor(name,
+                       levels = c("(Intercept)", "age_cat[30,50)",   "age_cat[50,65)",   "age_cat[65,80]",  "sex_bin", "race_catNH Black",
+                                  "race_catHispanic", "race_catOther"),
+                       labels = c("Intercept", "Age 30-49", "Age 50-64", "Age 65+", "Sex: Female", "Non-Hispanic Black", "Hispanic", "Other race")))
+
+# check CI widths
+df %>%
+  mutate(width = upper - lower) %>%
+  group_by(modelf, name) %>%
+  summarize(mw = mean(width)) %>%
+  pivot_wider(names_from = modelf, values_from = mw) %>%
+  mutate(pct = (BRR - Unweighted) / Unweighted * 100)
+df %>%
+  mutate(width = upper.joint - lower.joint) %>%
+  group_by(modelf, name) %>%
+  summarize(mw = mean(width)) %>%
+  pivot_wider(names_from = modelf, values_from = mw) %>%
+  mutate(pct = (BRR - Unweighted) / Unweighted * 100)
 
 df =
   plt_df_boot %>%
@@ -136,12 +165,29 @@ df =
   as_tibble() %>%
   filter(model %in% c("1", "3")) %>%
   mutate(modelf = recode_factor(model,
-                "1" = "Unweighted",
-                "3" = "BRR")) %>%
+                                "1" = "BRR",
+                                # "2" = "Weighted",
+                                "3" = "Unweighted")) %>%
+  mutate(name = factor(name,
+                       levels = c("(Intercept)", "age_cat[30,50)",   "age_cat[50,65)",   "age_cat[65,80]",  "sex_bin", "race_catNH Black",
+                                  "race_catHispanic", "race_catOther"),
+                       labels = c("Intercept", "Age 30-49", "Age 50-64", "Age 65+", "Sex: Female", "Non-Hispanic Black", "Hispanic", "Other race")))  %>%
+  mutate(modelf = fct_rev(modelf))
+
+extra_rows =
+  tibble(name = c("(Intercept)", "age_cat[30,50)", "age_cat[50,65)", "age_cat[65,80]", "sex_bin", "race_catNH Black", "race_catHispanic",
+                  "race_catOther"),
+         min =  c(0, rep(-6, 7)),
+         max = c(0, rep(4, 7))) %>%
   mutate(name = factor(name,
                        levels = c("(Intercept)", "age_cat[30,50)",   "age_cat[50,65)",   "age_cat[65,80]",  "sex_bin", "race_catNH Black",
                                   "race_catHispanic", "race_catOther"),
                        labels = c("Intercept", "Age 30-49", "Age 50-64", "Age 65+", "Sex: Female", "Non-Hispanic Black", "Hispanic", "Other race")))
+
+extra_rows =
+  extra_rows %>% mutate(modelf = "BRR") %>%
+  bind_rows(extra_rows %>% mutate(modelf = "Unweighted"))  %>%
+  mutate(modelf = factor(modelf, levels = c("Unweighted", "BRR")))
 
 plt_final=
   df %>%

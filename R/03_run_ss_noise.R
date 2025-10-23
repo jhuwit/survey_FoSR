@@ -16,10 +16,10 @@ library(tidyfun)
 library(mvtnorm)
 library(refund)
 library(svrep)
-source(here::here("R", "01_sim_functions.R"))
-source(here::here("R", "00_data_gen_function_ff.R"))
+source(here::here("R_cp", "01_sim_functions.R"))
+source(here::here("R_cp", "00_data_gen_function_ff.R"))
 source(here::here("R", "utils.R"))
-source(here::here("R", "create_survey_settings.R"))
+source(here::here("R_cp", "create_survey_settings2.R"))
 
 
 force = FALSE
@@ -36,14 +36,14 @@ options(survey.lonely.psu = "adjust")
 
 ifold = get_fold()
 
-outfile = here::here("results", "simulations", "survey_sim", paste0("fold_", sprintf("%03d", ifold), ".rds"))
+outfile = here::here("results", "simulations", "survey_sim_redo", paste0("fold_", sprintf("%03d", ifold), ".rds"))
 
 if(!file.exists(outfile) || force) { # if the file doesn't exist or we want to force re-do it
   if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
-  partial_dir = here::here("results", "simulations", "survey_sim", paste0("fold_", sprintf("%03d", ifold), "_partials"))
+  partial_dir = here::here("results", "simulations", "survey_sim_redo", paste0("fold_", sprintf("%03d", ifold), "_partials"))
   if (!dir.exists(partial_dir)) dir.create(partial_dir)
 
-  temp = settings_new[ifold,]
+  temp = settings_new %>% filter(fold == ifold)
 
 
   lst = generate_superpopulation(

@@ -79,10 +79,9 @@ get_betatilde = function(data, family = "gaussian", type = "weighted",
 
 
 get_betahat = function(betaTilde, L,
-                       nknots_min = NULL,
+                       nknots_min = 35,
                        splines = "tp"){
   argvals = 1:L
-  # nknots <- min(round(L / 2), nknots_min)
   nknots <- if (is.null(nknots_min)) round(L / 2) else min(round(L / 2), nknots_min)
 
 
@@ -425,14 +424,13 @@ get_cis = function(betaTilde_boot,
                    smooth_for_ci = TRUE,
                    smooth_for_variance = TRUE,
                    L,
-                   nknots_min = NULL,
+                   nknots_min = 35,
                    nknots_min_cov = 35,
                    nknots_fpca = 35,
                    mult_fac = 1.2) {
   argvals = 1:L
   B = ncol(betaTilde_boot[1, , ])
   nknots <- min(round(L / 2), nknots_min)
-  nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
   nknots_fpca <- min(round(L / 2), nknots_fpca)
   betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
   betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
@@ -513,12 +511,10 @@ get_cis_bam = function(betaTilde_boot,
                    smooth_for_variance = TRUE,
                    L,
                    nknots_min = NULL,
-                   nknots_min_cov = 35,
                    mult_fac = 1.2) {
   argvals = 1:L
   B = ncol(betaTilde_boot[1, , ])
   nknots <- min(round(L / 2), nknots_min)
-  nknots_cov <- ifelse(is.null(nknots_min_cov), 35, nknots_min_cov)
   nknots_fpca <- min(round(L / 2), 35)
   betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
   betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
@@ -760,8 +756,8 @@ run_boots <- function(data,  weights = NULL, boot_type,
     stop("Each element of `samp_method_by_stage` must be one of the following: \"SRSWR\", \"SRSWOR\", \"PPSWR\", \"PPSWOR\", or \"Poisson\"")
   }
 
-  if (!(boot_type %in% c("BRR", "RWYB", "weighted", "unweighted"))) {
-    stop("boot_type must be one of 'BRR', 'RWYB', 'weighted', 'unweighted'")
+  if (!(boot_type %in% c("BRR", "Rao-Wu-Yue-Beaumont", "weighted", "unweighted"))) {
+    stop("boot_type must be one of 'BRR', 'Rao-Wu-Yue-Beaumont', 'weighted', 'unweighted'")
   }
   data = data %>%
     mutate(row_id = row_number())
@@ -874,7 +870,7 @@ run_boots <- function(data,  weights = NULL, boot_type,
     betaTilde_boot <- simplify2array(coefs)
   }
 
-  else if (boot_type == "RWYB") {
+  else if (boot_type == "Rao-Wu-Yue-Beaumont") {
     if (!all(c("strata", "psu", "weight", "p_stage1", "p_stage2") %in% colnames(data))) {
       stop("RWYB bootstrap requires strata, psu, weight, p_stage1, p_stage2")
     }
