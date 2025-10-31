@@ -3,9 +3,26 @@ library(kableExtra)
 library(patchwork)
 source(here::here("R", "create_survey_settings_final.R"))
 
+colnames_to_row <- function(df) {
+  r1 = colnames(df) %>% t() %>% as_tibble()
+  colnames(df) = paste0("V", seq_len(ncol(df)))
+  out = rbind(r1, df)
+  # colnames(out) <- paste0("V", seq_len(ncol(df)))
+  out
+}
+# read in results
 res = read_rds(here::here("results", "simulations", "all_survey_res.rds"))
+mfpca_res = read_rds(here::here("results", "mfpca_sim.rds"))
 
+mfpca_res = mfpca_res %>%
+  mutate(type = case_when(
+    strata_scale == 0 & strata_sigma == 0 ~ "No random effects",
+    strata_scale > 0 & strata_sigma > 0 ~ "Strata scaling and noise",
+    strata_scale > 0 & strata_sigma == 0 ~ "Strata scaling only",
+    strata_scale == 0 & strata_sigma > 0 ~ "Strata noise only"
+  ))
 
+## add some labels for plotting
 all_res_prc =
   res %>%
   mutate(boot_type = if_else(boot_type == "RWYB", "Rao-Wu-Yue-Beaumont", boot_type)) %>%
@@ -29,11 +46,9 @@ all_res_prc =
          l_lab = factor(l_lab, levels = c("L = 50", "L = 100", "L = 1440")),
          n_lab = case_when(In == 100 ~ "I[n]==100",
                            In == 500 ~ "I[n]==500"),
-
-         # factor(paste0("n = ", In)),
          lMISE = log10(MISE))
 
-## start with gaussian only
+### separate into gaussian and non-gaussian
 all_res_g =
   all_res_prc %>%
   filter(family == "gaussian")
@@ -44,7 +59,7 @@ all_res_ng =
   mutate(family = factor(family, levels = c("poisson", "binomial"), labels = c("Poisson", "Bernoulli")))
 
 
-
+### function to plot MISE
 plot_mise = function(df, x_var, facet_x, facet_y, scales = "free_y", custom_labeller, xlab, tl = NULL, lnr = 1) {
   if(!is.null(facet_x) & !is.null(facet_y)){
     df = df %>%
@@ -101,98 +116,10 @@ plot_mise = function(df, x_var, facet_x, facet_y, scales = "free_y", custom_labe
   p
 }
 
-plot_se = function(df, x_var, facet_x, facet_y, scales = "free_y", custom_labeller, xlab, tl = NULL, lnr = 1) {
-  if(is.null(facet_x)) {
-    p = df %>%
-      rename(xvar := !!sym(x_var), facet_yf := !!sym(facet_y)) %>%
-      ggplot(aes(x = factor(xvar), y = mean_pw_se, color = boot_type)) +
-      facet_grid(. ~ facet_yf, labeller = custom_labeller, scales = scales) +
-      geom_boxplot(
-        box.colour = "black",
-        median.linewidth = 1,
-        staplewidth = 0.5, # show staple
-        outlier.size = 0.5,
-        outlier.alpha = 0.5
-      ) +
-      stat_summary(fun = mean,
-                   geom = "point",
-                   shape = 8,
-                   position = position_dodge(width = 0.75)) +
-      theme(palette.color.discrete = cols[1:4],
-            strip.text = element_text(size = 12)) +
-      theme_sub_legend(position = "bottom",
-                       text = element_text(size = 12),
-                       title = element_text(size = 13)) +
-      theme_sub_axis(text= element_text(size = 10),
-                     title = element_text(size = 13)) +
-      theme_sub_panel(grid.major.x = element_blank(),
-                      grid.minor.x = element_blank()) +
-      labs(x = xlab, y = "Mean Pointwise Standard Error", color = "Inference Type") +
-      guides(color = guide_legend(nrow = lnr, byrow = TRUE))
-  } else if (is.null(facet_y)) {
-    p = df %>%
-      rename(xvar := !!sym(x_var), facet_xf := !!sym(facet_x)) %>%
-      ggplot(aes(x = factor(xvar), y = mean_pw_se, color = boot_type)) +
-      facet_grid(facet_xf ~ ., labeller = custom_labeller, scales = scales) +
-      geom_boxplot(
-        box.colour = "black",
-        median.linewidth = 1,
-        staplewidth = 0.5, # show staple
-        outlier.size = 0.5,
-        outlier.alpha = 0.5
-      ) +
-      stat_summary(fun = mean,
-                   geom = "point",
-                   shape = 8,
-                   position = position_dodge(width = 0.75)) +
-      theme(palette.color.discrete = cols[1:4],
-            strip.text = element_text(size = 12)) +
-      theme_sub_legend(position = "bottom",
-                       text = element_text(size = 12),
-                       title = element_text(size = 13)) +
-      theme_sub_axis(text= element_text(size = 10),
-                     title = element_text(size = 13)) +
-      theme_sub_panel(grid.major.x = element_blank(),
-                      grid.minor.x = element_blank()) +
-      labs(x = xlab, y = "Mean Pointwise Standard Error", color = "Inference Type") +
-      guides(color = guide_legend(nrow = lnr, byrow = TRUE))
-  } else{
-    p = df %>%
-      rename(xvar := !!sym(x_var), facet_xf := !!sym(facet_x), facet_yf := !!sym(facet_y)) %>%
-      ggplot(aes(x = factor(xvar), y = mean_pw_se, color = boot_type)) +
-      facet_grid(facet_xf ~ facet_yf, labeller = custom_labeller, scales = scales) +
-      geom_boxplot(
-        box.colour = "black",
-        median.linewidth = 1,
-        staplewidth = 0.5, # show staple
-        outlier.size = 0.5,
-        outlier.alpha = 0.5
-      ) +
-      stat_summary(fun = mean,
-                   geom = "point",
-                   shape = 8,
-                   position = position_dodge(width = 0.75)) +
-      theme(palette.color.discrete = cols[1:4],
-            strip.text = element_text(size = 12)) +
-      theme_sub_legend(position = "bottom",
-                       text = element_text(size = 12),
-                       title = element_text(size = 13)) +
-      theme_sub_axis(text= element_text(size = 10),
-                     title = element_text(size = 13)) +
-      theme_sub_panel(grid.major.x = element_blank(),
-                      grid.minor.x = element_blank()) +
-      labs(x = xlab, y = "Mean Pointwise Standard Error",  color = "Inference Type") +
-      guides(color = guide_legend(nrow = lnr, byrow = TRUE))
-  }
-  if(!is.null(tl)) {
-    p = p + labs(title = paste0(tl))
-  }
-  p
-}
 
 # ------ MISE plots -------
 
-#####  Gaussian plots
+## ----  gaussian plots ----
 custom_labeller = labeller(
   facet_xf = label_parsed,   # parse snr_blab
   facet_yf  = label_value     # keep inf_lab plain
@@ -221,7 +148,8 @@ dev.off()
 png(here::here("manuscript", "figures", "mise_gaussian_int.png"), width = 10, height = 6, units = "in", res = 350)
 p2
 dev.off()
-## varying random effects
+
+## varying random effects structure for supplement
 p1 = all_res_g %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), In == 100, len == 50, type == "Strata noise only") %>%
@@ -242,6 +170,7 @@ p2 = all_res_g %>%
 png(here::here("manuscript", "figures", "mise_gaussian_supp.png"), width = 12, height = 8, units = "in", res = 350)
 p1 / p2 + plot_layout(heights = c(2, 1),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
+
 
 p1 = all_res_g %>%
   filter(var != "x") %>%
@@ -269,7 +198,7 @@ custom_labeller = labeller(
   facet_xf  = label_parsed     # keep inf_lab plain
 )
 
-## varying sample size parameters
+# varying sample size parameters
 p1 = all_res_g %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, snr_eps == 1, type == "Strata scaling and noise") %>%
@@ -333,7 +262,7 @@ png(here::here("manuscript", "figures", "mise_gaussian_n_supp_int.png"), width =
 p1 / p2 + plot_layout(heights = c(2, 1.25),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
-#####  Non Gaussian plots
+# -----  Non Gaussian plots -----
 
 p1 = all_res_ng %>%
   filter(var == "x") %>%
@@ -360,6 +289,7 @@ png(here::here("manuscript", "figures", "mise_ng.png"),
 p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+# repeat for intercept
 p1 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), In == 100, len == 50, type == "Strata scaling and noise") %>%
@@ -385,7 +315,7 @@ png(here::here("manuscript", "figures", "mise_ng_int.png"),
 p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
-#### --- supp plots ---
+## varying random effects
 p1 = all_res_ng %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), In == 100, len == 50, type == "Strata noise only") %>%
@@ -415,7 +345,6 @@ p1 = all_res_ng %>%
   plot_mise(x_var = "snr_b", facet_y = "inf_lab", facet_x = "family",
             tl = "Random effects structure: Strata/PSU noise only",
             scales = "free_y", custom_labeller = custom_labeller, xlab = expression(SNR[b]))
-
 
 
 p3 = all_res_ng %>%
@@ -501,19 +430,11 @@ png(here::here("manuscript", "figures", "mise_n_ng_supp_int.png"),
 (p1 + p2 + plot_layout(axis_titles = "collect")) / (p3 + p4 + plot_layout(axis_titles = "collect")) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 # p1 / p2 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
-# ------- coverage table --------
-
-# gaussian
-colnames_to_row <- function(df) {
-  r1 = colnames(df) %>% t() %>% as_tibble()
-  colnames(df) = paste0("V", seq_len(ncol(df)))
-  out = rbind(r1, df)
-  # colnames(out) <- paste0("V", seq_len(ncol(df)))
-  out
-}
 
 
+# ------- coverage tables --------
 
+# ----- gaussian coverage table ----
 t1 =
   all_res_g %>%
   filter(type == "Strata scaling and noise", snr_b == 0.5, snr_eps == 1, In == 100, len == 50) %>%
@@ -592,11 +513,10 @@ t6 = all_res_g %>%
   colnames_to_row()
 
 
+tb_gaussian = reduce(list(t1, t2, t3, t4, t5, t6), bind_rows)
 
-
-library(kableExtra)
-tb = reduce(list(t1, t2, t3, t4, t5, t6), bind_rows)
-tb %>%
+## pointwise table
+tb_gaussian %>%
   mutate(V2 = case_when(V2 == "cover_pw" ~ "Pointwise", V2 == "cover_joint" ~ "Joint", TRUE ~ V2),
          V1 = case_when(
            V1 == "Unweighted" ~ "Unweighted",
@@ -607,7 +527,8 @@ tb %>%
   select(-V2) %>%
   kable(format = "latex", booktabs = TRUE)
 
-tb %>%
+# joint table
+tb_gaussian %>%
   mutate(V2 = case_when(V2 == "cover_pw" ~ "Pointwise", V2 == "cover_joint" ~ "Joint", TRUE ~ V2),
          V1 = case_when(
            V1 == "Unweighted" ~ "Unweighted",
@@ -619,8 +540,9 @@ tb %>%
   kable(format = "latex", booktabs = TRUE)
 # kable_styling(latex_options = c("hold_position", "striped"))
 
-# non gaussian
+# -------- non gaussian coverage tables  ------
 
+# for fnl coefficient
 t1 =
   all_res_ng %>%
   filter(var == "x") %>%
@@ -694,8 +616,9 @@ t6 = all_res_ng %>%
   colnames_to_row()
 
 
-tb = reduce(list(t1, t2, t3, t5, t6), bind_rows)
-tb %>%
+tb_ng_x = reduce(list(t1, t2, t3, t5, t6), bind_rows)
+# pointwise
+tb_ng_x %>%
   mutate(V2 = case_when(V2 == "cover_pw" ~ "Pointwise", V2 == "cover_joint" ~ "Joint", TRUE ~ V2),
          V1 = case_when(
            V1 == "Unweighted" ~ "Unweighted",
@@ -705,8 +628,8 @@ tb %>%
   filter(V2 %in% c("Pointwise", "name")) %>%
   select(-V2) %>%
   kable(format = "latex", booktabs = TRUE)
-
-tb %>%
+# joint
+tb_ng_x %>%
   mutate(V2 = case_when(V2 == "cover_pw" ~ "Pointwise", V2 == "cover_joint" ~ "Joint", TRUE ~ V2),
          V1 = case_when(
            V1 == "Unweighted" ~ "Unweighted",
@@ -718,8 +641,7 @@ tb %>%
   kable(format = "latex", booktabs = TRUE)
 
 
-### probabilities for fnl intercept
-
+# for fnl intercept
 t1 =
   all_res_ng %>%
   filter(var != "x") %>%
@@ -793,8 +715,8 @@ t6 = all_res_ng %>%
   colnames_to_row()
 
 
-tb = reduce(list(t1, t2, t3, t5, t6), bind_rows)
-tb %>%
+tb_ng_int = reduce(list(t1, t2, t3, t5, t6), bind_rows)
+tb_ng_int %>%
   mutate(V2 = case_when(V2 == "cover_pw" ~ "Pointwise", V2 == "cover_joint" ~ "Joint", TRUE ~ V2),
          V1 = case_when(
            V1 == "Unweighted" ~ "Unweighted",
@@ -805,7 +727,7 @@ tb %>%
   select(-V2) %>%
   kable(format = "latex", booktabs = TRUE)
 
-tb %>%
+tb_ng_int %>%
   mutate(V2 = case_when(V2 == "cover_pw" ~ "Pointwise", V2 == "cover_joint" ~ "Joint", TRUE ~ V2),
          V1 = case_when(
            V1 == "Unweighted" ~ "Unweighted",
@@ -817,16 +739,15 @@ tb %>%
   kable(format = "latex", booktabs = TRUE)
 
 
-### ----- mfpca results ----- ####
+### ----- mfpca plots ----- ####
 
-mfpca_res = read_rds(here::here("results", "mfpca_sim.rds"))
-mfpca_res = mfpca_res %>%
-  mutate(type = case_when(
-    strata_scale == 0 & strata_sigma == 0 ~ "No random effects",
-    strata_scale > 0 & strata_sigma > 0 ~ "Strata scaling and noise",
-    strata_scale > 0 & strata_sigma == 0 ~ "Strata scaling only",
-    strata_scale == 0 & strata_sigma > 0 ~ "Strata noise only"
-  ))
+# max and min values
+lo = mfpca_res %>% arrange(desc(pve_w)) %>% slice(1:10)
+lo %>% slice(1) %>% t()
+hi = mfpca_res %>% arrange(desc(pve_b)) %>% slice(1:10)
+hi %>% slice(1) %>% t()
+res_sort = res %>% arrange(desc(pve_w))
+
 
 p1 = mfpca_res %>%
   mutate(type = factor(type)) %>%
@@ -880,15 +801,7 @@ png(here::here("manuscript", "figures", "pve_mfpca2.png"),
 p1
 dev.off()
 
-
-### find where unweighted or weighted did the worst
-lo = mfpca_res %>% arrange(desc(pve_w)) %>% slice(1:10)
-lo %>% slice(1) %>% t()
-hi = mfpca_res %>% arrange(desc(pve_b)) %>% slice(1:10)
-hi %>% slice(1) %>% t()
-res_sort = res %>% arrange(desc(pve_w))
-
-
+# find diffs between RWYB and weighted
 diffs_rwyb_x =
   all_res_g %>%
   filter(var == "x") %>%
@@ -963,4 +876,330 @@ p1
 dev.off()
 
 
+##### ------ simulation illustrations ------
+source(here::here("R", "00_data_gen_function_ff.R"))
 
+# generate different populations
+# pop with random effects
+lst = generate_superpopulation(I = 10e6, L = 50,
+                               scenario = 1,
+                               family = "gaussian",
+                               seed = 4565,
+                               num_strata = 30,
+                               strata_sigma = 0.05,
+                               strata_scale = 0.125,
+                               snr_b = 1, snr_eps = 1)
+# pop w/o random effects
+lst2 = generate_superpopulation(I = 10e6, L = 50,
+                                scenario = 1,
+                                family = "gaussian",
+                                seed = 4565,
+                                num_strata = 30,
+                                strata_sigma = 0,
+                                strata_scale = 0,
+                                snr_b = 1, snr_eps = 1)
+# psu df for merging/filtering
+psu_df = expand_grid(strata = 1:10,
+                     psu = 1:5) %>%
+  mutate(x = paste0(strata, "_", psu))
+
+
+no_re =
+  lst2$Y_obs %>%
+  as_tibble() %>%
+  bind_cols(psu = lst2$psu_assignments,
+            strata = lst2$stratum_assignments) %>%
+  filter(strata %in% c(1:10),
+         psu %in% psu_df$x) %>%
+  group_by(strata, psu) %>%
+  slice_sample(n = 100) %>%
+  ungroup() %>%
+  pivot_longer(cols = starts_with("V"),
+               names_to = "ind",
+               names_transform = ~as.integer(sub(".*V", "", .x))) %>%
+  mutate(type = "No random effects")
+
+ss = lst$Y_obs %>%
+  as_tibble() %>%
+  bind_cols(psu = lst$psu_assignments,
+            strata = lst$stratum_assignments) %>%
+  filter(strata %in% c(1:10),
+         psu %in% psu_df$x) %>%
+  group_by(strata, psu) %>%
+  slice_sample(n = 100) %>%
+  ungroup() %>%
+  pivot_longer(cols = starts_with("V"),
+               names_to = "ind",
+               names_transform = ~as.integer(sub(".*V", "", .x))) %>%
+  mutate(type = "Stratum scaling and noise")
+
+
+p1 = no_re %>% bind_rows(ss) %>%
+  mutate(strata = paste0("Stratum ", strata),
+         strata = factor(strata, levels = paste0("Stratum ", seq(1:10)))) %>%
+  filter(strata %in% c("Stratum 1", "Stratum 2", "Stratum 3")) %>%
+  ggplot(aes(x = ind, y = value, color = factor(psu))) +
+  facet_grid(strata ~ type) +
+  geom_smooth(se = FALSE, linewidth = 1) +
+  labs(x = "Functional Domain", y = "Value", title = "Simulation",
+       subtitle = "Mean smoothed outcomes by stratum and PSU") +
+  theme_light(base_size = 14) +
+  # theme(legend.position = "none") +
+  scale_color_paletteer_d("colorBlindness::SteppedSequential5Steps", direction = -1,
+                          name = "Stratum_PSU")
+
+# start here
+# pa_df = read_rds(here::here("data", "pa_df_persub.rds"))
+pa_df = read_rds(here::here("data", "mims_covariates.rds"))
+strata_psu =
+  pa_df %>% select(strata, psu) %>%
+  distinct() %>%
+  arrange(desc(strata)) %>%
+  mutate(s2 = data.table::rleid(strata)) %>%
+  filter(s2 <= 3)
+
+pa_df_small =
+  pa_df %>%
+  filter(strata %in% strata_psu$strata,
+         psu %in% strata_psu$psu) %>%
+  pivot_longer(cols = starts_with("min"),
+               names_to = "ind",
+               names_transform = ~as.integer(sub(".*min\\_", "", .x)))
+
+p2 = pa_df_small %>%
+  mutate(strata = factor(strata, labels = c("1", "2", "3")),
+         psu = paste0(strata, "_", psu),
+         strata = paste0("Stratum ", strata)) %>%
+  ggplot(aes(x = ind, y = value, color = factor(psu))) +
+  facet_grid(strata ~ .) +
+  geom_smooth(se = FALSE, linewidth = 1) +
+  labs(x = "Functional Domain", y = "MIMS per minute", title = "NHANES",
+       subtitle = "Mean smoothed outcomes by stratum and PSU") +
+  theme_light(base_size = 14) +
+  # theme(legend.position = "none") +
+  scale_color_manual(values = c("#990F0FFF", "#CC5151FF", "#99540FFF", "#CC8E51FF", "#FF5500", "#FFCC65"),
+                     name = "Stratum_PSU") +
+  scale_x_continuous(limits = c(0,1440), breaks = seq(0, 1440, 240), labels = c("00:00", "04:00", "08:00",
+                                                                                "12:00", "16:00", "20:00", "24:00"))
+
+png(here::here("manuscript", "figures", "outcomes_strata_psu.png"), width = 14, height = 6, units = "in", res = 350)
+p1 + p2 + plot_annotation(tag_levels = "A")
+dev.off()
+
+### plot outcomes by weight tertile
+sample = sample_from_population_wor(
+  X_des = lst$X_des,
+  Y_obs = lst$Y_obs,
+  L = 50,
+  I_n = 100,
+  num_strata = 30,
+  stratum_assignments = lst$stratum_assignments,
+  psu_assignments = lst$psu_assignments,
+  dirichlet_probs = lst$dirichlet_probs,
+  seed = iter,
+  inf_level = 15,
+  compression = 2,
+  family = "gaussian"
+)
+
+sample_noninf = sample_from_population_wor(
+  X_des = lst$X_des,
+  Y_obs = lst$Y_obs,
+  L = 50,
+  I_n = 100,
+  num_strata = 30,
+  stratum_assignments = lst$stratum_assignments,
+  psu_assignments = lst$psu_assignments,
+  dirichlet_probs = lst$dirichlet_probs,
+  seed = iter,
+  inf_level = 0,
+  compression = 2,
+  family = "gaussian"
+)
+
+
+Y_mat = sample %>% select(starts_with("Y")) %>%
+  as.matrix()
+
+quants = quantile(sample$weight, c(1/3, 2/3))
+
+mean_df =
+  sample %>%
+  mutate(Y = I(Y_mat)) %>%
+  mutate(quant = cut(weight, breaks = c(-Inf, quants, Inf), labels = c("low", "med", "high"))) %>%
+  mutate(Y = matrix(Y, ncol = 50),
+         Y_tf = tfd(Y, length = 50),
+         Y_smooth = tf_smooth(Y_tf, method = "lowess")) %>%
+  group_by(quant) %>%
+  summarize(Y_mean_strat = mean(Y_tf)) %>%
+  ungroup() %>%
+  mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
+
+Y_mat_ni = sample_noninf %>% select(starts_with("Y")) %>%
+  as.matrix()
+quants = quantile(sample_noninf$weight, c(1/3, 2/3))
+
+mean_df_ni =
+  sample_noninf %>%
+  mutate(Y = I(Y_mat_ni)) %>%
+  mutate(quant = cut(weight, breaks = c(-Inf, quants, Inf), labels = c("low", "med", "high"))) %>%
+  mutate(Y = matrix(Y, ncol = 50),
+         Y_tf = tfd(Y, length = 50),
+         Y_smooth = tf_smooth(Y_tf, method = "lowess")) %>%
+  group_by(quant) %>%
+  summarize(Y_mean_strat = mean(Y_tf)) %>%
+  ungroup() %>%
+  mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
+
+
+p1 = mean_df %>%
+  mutate(sample = "Sampling: informative") %>%
+  bind_rows(mean_df_ni %>% mutate(sample ="Sampling: random")) %>%
+  ggplot() +
+  geom_spaghetti(aes(y = Y_mean_strat, color = quant), linewidth = 1.1, alpha = 1) +
+  scale_color_manual(name = "Weight tertile",
+                     values = c("#075AFFFF", "#FF9900FF", "#FF0000FF"),
+                     labels = c("1", "2", "3")) +
+  facet_grid(.~sample)+
+  labs(x = "Functional domain", y = "Value",
+       title = "Simulation",
+       subtitle = "Mean outcomes by weight tertile") +
+  theme_light(base_size = 14) +
+  theme(legend.position = "bottom")
+
+
+
+Y_mat_nh = pa_df %>% select(starts_with("min")) %>%
+  as.matrix()
+quants = quantile(pa_df$full_sample_2_year_mec_exam_weight/2, c(1/3, 2/3))
+
+mean_df_nh =
+  pa_df %>%
+  select(-starts_with("min")) %>%
+  mutate(weight = full_sample_2_year_mec_exam_weight/2) %>%
+  mutate(Y = I(Y_mat_nh)) %>%
+  mutate(quant = cut(weight, breaks = c(-Inf, quants, Inf), labels = c("low", "med", "high"))) %>%
+  mutate(Y = matrix(Y, ncol = 1440),
+         Y_tf = tfd(Y, length = 1440),
+         Y_smooth = tf_smooth(Y_tf, method = "lowess")) %>%
+  group_by(quant) %>%
+  summarize(Y_mean_strat = mean(Y_tf)) %>%
+  ungroup() %>%
+  mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
+
+# paletteer_d("colorBlindness::Blue2OrangeRed14Steps")
+
+
+
+p2 = mean_df_nh %>%
+  ggplot() +
+  geom_spaghetti(aes(y = Y_mean_strat, color = quant, linetype = quant), linewidth = 1.1, alpha = 1) +
+  scale_color_manual(name = "Weight tertile",
+                     values = c("#075AFFFF", "#FF9900FF", "#FF0000FF"),
+                     labels = c("1", "2", "3")) +
+  scale_linetype_manual(values = c(1, 2, 3),
+                        labels = c("1", "2", "3"),
+                        name = "Weight tertile") +
+  labs(x = "Functional domain", y = "Value",
+       title = "NHANES",
+       subtitle = "Mean outcomes by weight tertile") +
+  labs(x = "Functional Domain", y = "MIMS per minute") +
+  theme_light(base_size = 14) +
+  scale_x_continuous(limits = c(0,1440), breaks = seq(0, 1440, 240), labels = c("00:00", "04:00", "08:00",
+                                                                                "12:00", "16:00", "20:00", "24:00")) +
+  theme(legend.position = "bottom")
+
+png(here::here("manuscript", "figures", "weight_strata_psu.png"), width = 10, height = 6, units = "in", res = 350)
+p1 | p2 + plot_annotation(tag_levels = "A")
+dev.off()
+
+## get non-informative from no res
+
+sample2 = sample_from_population_wor(
+  X_des = lst2$X_des,
+  Y_obs = lst2$Y_obs,
+  L = 50,
+  I_n = 100,
+  num_strata = 30,
+  stratum_assignments = lst2$stratum_assignments,
+  psu_assignments = lst2$psu_assignments,
+  dirichlet_probs = lst2$dirichlet_probs,
+  seed = iter,
+  inf_level = 15,
+  compression = 2,
+  family = "gaussian"
+)
+
+sample_noninf2 = sample_from_population_wor(
+  X_des = lst2$X_des,
+  Y_obs = lst2$Y_obs,
+  L = 50,
+  I_n = 100,
+  num_strata = 30,
+  stratum_assignments = lst2$stratum_assignments,
+  psu_assignments = lst2$psu_assignments,
+  dirichlet_probs = lst2$dirichlet_probs,
+  seed = iter,
+  inf_level = 0,
+  compression = 2,
+  family = "gaussian"
+)
+
+
+Y_mat = sample2 %>% select(starts_with("Y")) %>%
+  as.matrix()
+
+quants = quantile(sample2$weight, c(1/3, 2/3))
+
+mean_df2 =
+  sample2 %>%
+  mutate(Y = I(Y_mat)) %>%
+  mutate(quant = cut(weight, breaks = c(-Inf, quants, Inf), labels = c("low", "med", "high"))) %>%
+  mutate(Y = matrix(Y, ncol = 50),
+         Y_tf = tfd(Y, length = 50),
+         Y_smooth = tf_smooth(Y_tf, method = "lowess")) %>%
+  group_by(quant) %>%
+  summarize(Y_mean_strat = mean(Y_tf)) %>%
+  ungroup() %>%
+  mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
+
+Y_mat_ni = sample_noninf2 %>% select(starts_with("Y")) %>%
+  as.matrix()
+quants = quantile(sample_noninf2$weight, c(1/3, 2/3))
+
+mean_df_ni2 =
+  sample_noninf2 %>%
+  mutate(Y = I(Y_mat_ni)) %>%
+  mutate(quant = cut(weight, breaks = c(-Inf, quants, Inf), labels = c("low", "med", "high"))) %>%
+  mutate(Y = matrix(Y, ncol = 50),
+         Y_tf = tfd(Y, length = 50),
+         Y_smooth = tf_smooth(Y_tf, method = "lowess")) %>%
+  group_by(quant) %>%
+  summarize(Y_mean_strat = mean(Y_tf)) %>%
+  ungroup() %>%
+  mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
+
+
+p1 = mean_df %>%
+  mutate(sample = "Sampling: informative", re = "Strata scaling and noise") %>%
+  bind_rows(mean_df_ni %>% mutate(sample ="Sampling: random", re = "Strata scaling and noise")) %>%
+  bind_rows(mean_df_ni2 %>% mutate(sample ="Sampling: random", re = "No random effects")) %>%
+  bind_rows(mean_df2 %>% mutate(sample ="Sampling: informative", re = "No random effects")) %>%
+  ggplot() +
+  geom_spaghetti(aes(y = Y_mean_strat, color = quant, linetype = quant), linewidth = 1.1, alpha = 1) +
+  scale_color_manual(name = "Weight tertile",
+                     values = c("#075AFFFF", "#FF9900FF", "#FF0000FF"),
+                     labels = c("1", "2", "3")) +
+  scale_linetype_manual(values = c(1, 2, 3),
+                        labels = c("1", "2", "3"),
+                        name = "Weight tertile") +
+  facet_grid(sample ~ re)+
+  labs(x = "Functional domain", y = "Value",
+       title = "Simulation",
+       subtitle = "Mean outcomes by weight tertile") +
+  theme_light(base_size = 14) +
+  theme(legend.position = "bottom")
+
+png(here::here("manuscript", "figures", "weight_strata_psu.png"), width = 10, height = 6, units = "in", res = 350)
+p1 + p2 + plot_annotation(tag_levels = "A")
+dev.off()
