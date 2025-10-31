@@ -19,6 +19,7 @@ library(mvtnorm)
 library(refund)
 library(svrep)
 force = FALSE
+force_iter = FALSE
 source(here::here("R_cp", "01_sim_functions.R"))
 source(here::here("R_cp", "00_data_gen_function_ff.R"))
 source(here::here("R", "utils.R"))
@@ -33,7 +34,7 @@ nsim = 50
 out_file = here::here("results", "mfpca_sim", paste0("fold_", sprintf("%03d", ifold), ".rds"))
 if (!dir.exists(dirname(out_file))) dir.create(dirname(out_file))
 
-temp = settings_new[ifold, ] # set settings for this simulation
+temp = settings[ifold, ] # set settings for this simulation
 
 if (!file.exists(out_file) & temp$len != 1440) {
 
@@ -42,10 +43,9 @@ if (!file.exists(out_file) & temp$len != 1440) {
 
 
   print(ifold)
-  temp = settings_new[ifold, ] # set settings for this simulation
+  temp = settings[ifold, ] # set settings for this simulation
 
   lst = generate_superpopulation(
-    scenario = temp$scenario,
     family = temp$family,
     I = 10e6,
     L = temp$len,
@@ -132,7 +132,7 @@ if (!file.exists(out_file) & temp$len != 1440) {
     keep(., is.data.frame) %>%
     list_rbind()
 
-  write_rds(sim_res, file = outfile)
+  write_rds(sim_res, file = out_file)
   unlink(partial_dir, recursive = TRUE)
 
 }

@@ -1,17 +1,20 @@
 library(tidyverse)
-# getremote survey_FoSR/results/mfpca_sim3/*.rds results/mfpca_sim3/
-source(here::here("R", "create_survey_settings.R"))
-files = list.files(here::here("results", "mfpca_sim3"), full.names = TRUE)
+source(here::here("R_cp", "create_survey_settings_final.R"))
+files = list.files(here::here("results", "mfpca_sim"), full.names = TRUE,
+                   pattern = "*rds")
 
 
 res = map_dfr(.x = files, .f = \(x) read_rds(x) %>%
                 mutate(fold =
-                         as.numeric(sub(".*fold\\_(.+).rds.*", "\\1", basename(x))),
-                       iter = row_number()))
+                       as.numeric(sub(".*fold\\_(.+).rds.*", "\\1", basename(x)))))
 
+res =
+  res %>%
+  group_by(fold) %>%
+  summarize(across(c(pve_b, pve_w, tv_bw, tv_win), mean), .groups = "drop")
 
 res = res %>%
-  left_join(settings_new, by = "fold")
+  left_join(settings, by = "fold")
 
 res = res %>%
   mutate(type = case_when(
@@ -22,3 +25,6 @@ res = res %>%
   ))
 
 write_rds(res, here::here("results", "mfpca_sim.rds"))
+
+
+######
