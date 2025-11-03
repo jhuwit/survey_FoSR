@@ -20,10 +20,10 @@ library(refund)
 library(svrep)
 force = FALSE
 force_iter = FALSE
-source(here::here("R_cp", "01_sim_functions.R"))
-source(here::here("R_cp", "00_data_gen_function_ff.R"))
+source(here::here("R", "01_sim_functions.R"))
+source(here::here("R", "00_data_gen_function_ff.R"))
 source(here::here("R", "utils.R"))
-source(here::here("R_cp", "create_survey_settings_final.R"))
+source(here::here("R", "create_survey_settings.R"))
 
 
 ifold = get_fold()

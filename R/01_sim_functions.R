@@ -28,52 +28,31 @@ get_betatilde = function(data, family = "gaussian", type = "weighted",
     stop("please specify boot_type as one of 'weighted', 'unweighted'")
   }
 
-  out_index <- grep(paste0("^", model_formula[2]), names(data)) # indices that start with the outcome name
-  if(length(out_index) != 1){ # functional observations stored in multiple columns
-    L <- length(out_index)
-  }else{ # observations stored as a matrix in one column using the I() function
-    L <- ncol(data[,out_index])
-  }
-  argvals <- 1:L
+  out_index <- grep(paste0("^", model_formula[2]), names(data))
+  Y_mat <- as.matrix(data[, out_index])
+  X_base <- model.matrix(stats::as.formula(paste0("~", model_formula[3])), data = data)
 
-  unimm_wt <- function(l) {
-    data$Yl <- unclass(data[, out_index][, l])
-
-    fit_uni <- suppressMessages(
-      glm(
-        formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-        family = family,
-        control = glm.control(maxit = 5000),
-        weights = weight,
-        data = data
-      )
-    )
-    betaTilde <- coef(fit_uni)
-    return(list(betaTilde = betaTilde))
-  }
-  unimm <- function(l) {
-    data$Yl <- unclass(data[, out_index][, l])
-    fit_uni <- suppressMessages(glm(
-      formula = stats::as.formula(paste0("Yl ~ ", model_formula[3])),
-      family = family,
-      control = glm.control(maxit = 5000),
-      data = data
-    ))
-    betaTilde <- coef(fit_uni)
-    return(list(betaTilde = betaTilde))
-  }
-  if (type == "weighted") {
-    massmm <- lapply(argvals, unimm_wt)
-  } else if (type == "unweighted") {
-    massmm <- lapply(argvals, unimm)
+  if (is.character(family)) {
+    family <- get(family, mode = "function", envir = parent.frame())()
   }
 
-  # Obtain betaTilde, fixed effects estimates
-  betaTilde <- t(do.call(rbind, lapply(massmm, '[[', 1)))
-  colnames(betaTilde) <- argvals
-  return(betaTilde)
+  if(type == "weighted") {
+    w_tmp = data$weight
+  } else {
+    w_tmp = NULL
+  }
+
+  if (family$family == "gaussian") {
+    coefs = lm_wls_multi(X_base, Y_mat, w = w_tmp)
+  } else {
+    coefs = glm_batch_multiY(X = X_base, y_mat = Y_mat, w = w_tmp, family = family,
+                             add_intercept = FALSE, return_se = FALSE)$coef
+  }
+
+  colnames(coefs) <- seq_len(ncol(Y_mat))
+
+  return(coefs)
 }
-
 
 
 
@@ -505,93 +484,7 @@ get_cis = function(betaTilde_boot,
   ))
 
 }
-get_cis_bam = function(betaTilde_boot,
-                   betaHat,
-                   smooth_for_ci = TRUE,
-                   smooth_for_variance = TRUE,
-                   L,
-                   nknots_min = NULL,
-                   mult_fac = 1.2) {
-  argvals = 1:L
-  B = ncol(betaTilde_boot[1, , ])
-  nknots <- min(round(L / 2), nknots_min)
-  nknots_fpca <- min(round(L / 2), 35)
-  betaHat_boot <- array(NA, dim = c(nrow(betaHat), ncol(betaHat), ncol(betaTilde_boot[1, , ])))
-  betaHat.var <- array(NA, dim = c(L, L, nrow(betaHat)))
-  # smooth
 
-
-  # for (b in 1:B) {
-  #   betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
-  #     gam(x ~ s(
-  #       argvals, bs = "tp", k = (nknots + 1)
-  #     ), method = "GCV.Cp")$fitted.values))
-  # }
-
-  for (b in 1:B) {
-    betaHat_boot[, , b] <- t(apply(betaTilde_boot[, , b], 1, function(x)
-      bam(x ~ s(
-        argvals, bs = "tp", k = (nknots + 1)
-      ), method = "GCV.Cp")$fitted.values))
-  }
-
-  for (r in 1:nrow(betaHat)) {
-    if (smooth_for_variance) {
-      betaHat.var[, , r] <- mult_fac * var(t(betaHat_boot[r, , ]))
-    } else{
-      betaHat.var[, , r] <- mult_fac * var(t(betaTilde_boot[r, , ]))
-    }
-  }
-
-  N <- 10000
-  qn <- rep(0, length = nrow(betaHat))
-  set.seed(456)
-  for (i in 1:length(qn)) {
-    if (smooth_for_ci) {
-      est_bs <- t(betaHat_boot[i, , ])
-    } else{
-      est_bs <- t(betaTilde_boot[i, , ])
-    }
-    fit_fpca <- suppressWarnings(refund::fpca.face(est_bs, knots = nknots_fpca)) # suppress sqrt(Eigen$values) NaNs
-    ## extract estimated eigenfunctions/eigenvalues
-    phi <- fit_fpca$efunctions
-    lambda <- fit_fpca$evalues
-    K <- length(fit_fpca$evalues)
-
-    ## simulate random coefficients
-    theta <- matrix(stats::rnorm(N * K), nrow = N, ncol = K) # generate independent standard normals
-    if (K == 1) {
-      theta <- theta * sqrt(lambda) # scale to have appropriate variance
-      X_new <- tcrossprod(theta, phi) # simulate new functions
-    } else{
-      theta <- theta %*% diag(sqrt(lambda)) # scale to have appropriate variance
-      X_new <- tcrossprod(theta, phi) # simulate new functions
-    }
-    x_sample <- X_new + t(fit_fpca$mu %o% rep(1, N)) # add back in the mean function
-    Sigma_sd <- Rfast::colVars(x_sample, std = TRUE, na.rm = FALSE) # standard deviation: apply(x_sample, 2, sd)
-    x_mean <- colMeans(est_bs)
-    # x_sample: N x p matrix
-    # x_mean: length-p vector
-    # Sigma_sd: length-p vector
-
-    # Vectorized computation
-    z <- sweep(x_sample, 2, x_mean, "-")     # center
-    z <- sweep(z, 2, Sigma_sd, "/")          # standardize
-    un <- apply(abs(z), 1, max)              # row-wise max of absolute values
-
-    qn[i] <- stats::quantile(un, 0.95)
-  }
-
-  return(list(
-    betaHat = betaHat,
-    betaHat.var = betaHat.var,
-    qn = qn
-  ))
-
-}
-#
-# mod_output = get_cis(res[[1]], betaHat = betaHat)
-#
 
 get_coverage_stats = function(mod_output, beta_true, name, L){
   MISE <- rowMeans((mod_output$betaHat - beta_true)^2)
@@ -738,14 +631,13 @@ pffrcoef_to_tf = function(coef) {
 
 
 
-## extra
-sample_data <- function(df) {
+sample_data = function(df) {
   strata = psu = NULL
   rm(list = c("strata", "psu"))
   df %>% dplyr::group_by(strata) %>%
     dplyr::summarize(psu = sample(psu, size = 1), .groups = "drop")
 }
-run_boots <- function(data,  weights = NULL, boot_type,
+run_boots = function(data,  weights = NULL, boot_type,
                       family = "gaussian", num_boots = 500,
                       seed = 2025, samp_method_by_stage = NULL,
                       parallel = FALSE, n_cores = NULL, model_formula = as.formula(paste0('Y~', 'X'))) {
@@ -1020,34 +912,3 @@ get_cis_par = function(betaTilde_boot,
 
 }
 
-get_betatilde = function(data, family = "gaussian", type = "weighted",
-                         model_formula = as.formula(paste0('Y~', 'X'))){
-  if(!(type %in% c("weighted", "unweighted"))){
-    stop("please specify boot_type as one of 'weighted', 'unweighted'")
-  }
-
-  out_index <- grep(paste0("^", model_formula[2]), names(data))
-  Y_mat <- as.matrix(data[, out_index])
-  X_base <- model.matrix(stats::as.formula(paste0("~", model_formula[3])), data = data)
-
-  if (is.character(family)) {
-    family <- get(family, mode = "function", envir = parent.frame())()
-  }
-
-  if(type == "weighted") {
-    w_tmp = data$weight
-  } else {
-    w_tmp = NULL
-  }
-
-  if (family$family == "gaussian") {
-    coefs = lm_wls_multi(X_base, Y_mat, w = w_tmp)
-  } else {
-    coefs = glm_batch_multiY(X = X_base, y_mat = Y_mat, w = w_tmp, family = family,
-                             add_intercept = FALSE, return_se = FALSE)$coef
-  }
-
-  colnames(coefs) <- seq_len(ncol(Y_mat))
-
-  return(coefs)
-}

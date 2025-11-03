@@ -1,5 +1,5 @@
 library(tidyverse)
-source(here::here("R_cp", "create_survey_settings_final.R"))
+source(here::here("R", "create_survey_settings_final.R"))
 files = list.files(here::here("results", "mfpca_sim"), full.names = TRUE,
                    pattern = "*rds")
 
