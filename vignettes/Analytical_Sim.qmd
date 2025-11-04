@@ -1,5 +1,5 @@
 ---
-title: "Analytical Simulation"
+title: "Web Appendix C: Analytical Simulation Vignette"
 format: 
   pdf:
     code-block-border-left: false
