@@ -1,7 +1,7 @@
 library(tidyverse)
 library(kableExtra)
 library(patchwork)
-source(here::here("R", "create_survey_settings_final.R"))
+source(here::here("R", "create_survey_settings.R"))
 
 colnames_to_row <- function(df) {
   r1 = colnames(df) %>% t() %>% as_tibble()
