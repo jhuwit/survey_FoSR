@@ -145,10 +145,31 @@ png(here::here("manuscript", "figures", "mise_gaussian.png"), width = 10, height
 p1
 dev.off()
 
+custom_labeller = labeller(
+  facet_yf = label_value,   # parse snr_blab
+  facet_xf  = label_parsed     # keep inf_lab plain
+)
+
+# varying sample size parameters
+p2 = all_res_g %>%
+  filter(var == "x") %>%
+  filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, snr_eps == 1, type == "Strata scaling and noise") %>%
+  plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain")
+
+
+png(here::here("manuscript", "figures", "mise_gaussian_2panel.png"), width = 10, height = 8, units = "in", res = 350)
+p1 / p2 + plot_layout(guides = "collect", axes = "collect", heights = c(1.5, 1)) + plot_annotation(tag_level = "A") & theme(legend.position = "bottom")
+dev.off()
+
 png(here::here("manuscript", "figures", "mise_gaussian_int.png"), width = 10, height = 6, units = "in", res = 350)
 p2
 dev.off()
 
+custom_labeller = labeller(
+  facet_xf = label_parsed,   # parse snr_blab
+  facet_yf  = label_value     # keep inf_lab plain
+)
 ## varying random effects structure for supplement
 p1 = all_res_g %>%
   filter(var == "x") %>%
@@ -882,7 +903,6 @@ source(here::here("R", "00_data_gen_function_ff.R"))
 # generate different populations
 # pop with random effects
 lst = generate_superpopulation(I = 10e6, L = 50,
-                               scenario = 1,
                                family = "gaussian",
                                seed = 4565,
                                num_strata = 30,
@@ -891,7 +911,6 @@ lst = generate_superpopulation(I = 10e6, L = 50,
                                snr_b = 1, snr_eps = 1)
 # pop w/o random effects
 lst2 = generate_superpopulation(I = 10e6, L = 50,
-                                scenario = 1,
                                 family = "gaussian",
                                 seed = 4565,
                                 num_strata = 30,
@@ -987,6 +1006,7 @@ p1 + p2 + plot_annotation(tag_levels = "A")
 dev.off()
 
 ### plot outcomes by weight tertile
+iter = 1
 sample = sample_from_population_wor(
   X_des = lst$X_des,
   Y_obs = lst$Y_obs,
@@ -1052,7 +1072,7 @@ mean_df_ni =
   mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
 
 
-p1 = mean_df %>%
+p1a = mean_df %>%
   mutate(sample = "Sampling: informative") %>%
   bind_rows(mean_df_ni %>% mutate(sample ="Sampling: random")) %>%
   ggplot() +
@@ -1091,7 +1111,7 @@ mean_df_nh =
 
 
 
-p2 = mean_df_nh %>%
+p2a = mean_df_nh %>%
   ggplot() +
   geom_spaghetti(aes(y = Y_mean_strat, color = quant, linetype = quant), linewidth = 1.1, alpha = 1) +
   scale_color_manual(name = "Weight tertile",
@@ -1110,7 +1130,7 @@ p2 = mean_df_nh %>%
   theme(legend.position = "bottom")
 
 png(here::here("manuscript", "figures", "weight_strata_psu.png"), width = 10, height = 6, units = "in", res = 350)
-p1 | p2 + plot_annotation(tag_levels = "A")
+p1a | p2a + plot_annotation(tag_levels = "A")
 dev.off()
 
 ## get non-informative from no res
@@ -1180,7 +1200,7 @@ mean_df_ni2 =
   mutate(Y_mean_strat = tf_smooth(Y_mean_strat, method = "lowess"))
 
 
-p1 = mean_df %>%
+p1b = mean_df %>%
   mutate(sample = "Sampling: informative", re = "Strata scaling and noise") %>%
   bind_rows(mean_df_ni %>% mutate(sample ="Sampling: random", re = "Strata scaling and noise")) %>%
   bind_rows(mean_df_ni2 %>% mutate(sample ="Sampling: random", re = "No random effects")) %>%
@@ -1201,5 +1221,11 @@ p1 = mean_df %>%
   theme(legend.position = "bottom")
 
 png(here::here("manuscript", "figures", "weight_strata_psu.png"), width = 10, height = 6, units = "in", res = 350)
-p1 + p2 + plot_annotation(tag_levels = "A")
+p1b + p2 + plot_annotation(tag_levels = "A")
 dev.off()
+
+png(here::here("manuscript", "figures", "sim_fig_panels.png"), width = 12, height = 12, units = "in", res = 350)
+(p1 + p2) / (p1b + p2) + plot_annotation(tag_levels = "A")
+dev.off()
+
+(p1 + p2) / (p1b + p2) + plot_annotation(tag_levels = "A")
