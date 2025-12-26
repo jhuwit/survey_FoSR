@@ -1,4 +1,6 @@
-# survey_FoSR
+# Function on Scalar Regression with Complex Survey Designs
+[Preprint](https://arxiv.org/abs/2511.05487)
+[R package](https://jhuwit.github.io/svyfosr/)
 ## R
 + `00_data_gen_function_ff.R`: generate functional survey data without informative sampling
 + `01_sim_functions.R`: functions for running simulation 
