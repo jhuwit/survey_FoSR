@@ -7,35 +7,38 @@ Code to accompany manuscript
 
 Guide to repository: 
 ## R
-+ `00_data_gen_function_ff.R`: generate functional survey data without informative sampling
-+ `01_sim_functions.R`: functions for running simulation 
-+ `03_run_sim_survey.R`: run simulation
-+ `03_run_sim_nonsurvey.R`: run non-survey simulation
-+ `03b_proc_res_nonsurvey.R`: process results from non-survey sim; make plots and tables 
-+ `03b_proc_res_survey.R`: process results from survey sim; make plots and tables
-+ `04_run_sim_empirical.R`: run empirical simulation based on NHANES data
-+ `04b_proc_res_empirical.R`: process results from empirical sim; make plots and tables
-+ `05_run_application.R`: run application to real data
-+ `06_run_mfpca_nhanes.R`: run MFPCA on NHANES data
-+ `06_run_mfpca_sim.R`: run MFPCA on simulated data
-+ `06b_proc_res_mfpca_sim.R`: process results from MFPCA sim; make plots and tables
-
++ `00_data_gen_function_ff.R`: generate functional survey data
++ `00_data_gen_function_fast.R`: generate functional survey data for 1440 simulation (faster for big data)
++ `01_sim_functions.R`: functions for running simulation
++ `02a_run_sim_nonsurvey.R`: run non-survey simulation
++ `02b_process_nonsurvey_sim_results.R`: process results from non-survey sim
++ `03a_get_population_mean.R`: get population means for results processing in simulation
++ `03b_run_sim_ff.R`: run simulation
++ `03c_process_survey_sim_results.R`: process results from survey sim
++ `04a_run_sim_empirical_1440.R`: run empirical simulation based on NHANES data
++ `04b_process_empirical_1440_sim_results.R`: process results from empirical sim
++ `05a_process_pa_data.R`: process NHANES PA data for application
++ `05b_application_1440.R`: run application to real data
++ `06a_run_mfpca_nhanes.R`: run MFPCA on NHANES data
++ `06b_run_mfpca_sim.R`: run MFPCA on simulated data
++ `06c_process_mfpca_sim_results.R`: process results from MFPCA sim
++ `07_tables_and_figures.R`: tables and figs for manuscript
 + `benchmark.R`: comparing sped-up GLMS vs original GLMS
 + `utils.R`: helpful functions for cluster 
 + `create_survey_settings.R`: create settings for survey sim
 + `create_nonsurvey_settings.R`: create settings for non-survey sim
-+ `process_steps_data.R`: process NHANES data to get steps data at participant level 
-+ `create_nhanes_df.R`: process NHANES data to get MIMS at participant level for empirical simulation 
 
 ## data 
 + `steps_covariates.rds`: data needed for empirical simulation and application 
-+ `covariates_accel_mortality_df.rds`
-+ `pa_df_persub.rds`
 
-## results
-+ `application.rds`
+## results/simulations
++ `all_empirical_sim_res.rds`: results from empirical simulation
++ `all_survey_res.rds`: results from survey simulation
++ `all_nonsurvey_sim_res.rds`: results from non-survey simulation
 
-### simulations 
-+ `all_survey_sim_res.rds`
 ## vignettes
++ `Analytical_Sim.qmd`: quarto document describing analytical simulation
++ `Analytical_Simulation_Appendix.html`: HTML describing simulation, for manuscript
++ `Analytical_Simulation_Appendix.qmd`: quarto document to generate above html
 
+`pipeline.sh`: bash code for running on cluster
