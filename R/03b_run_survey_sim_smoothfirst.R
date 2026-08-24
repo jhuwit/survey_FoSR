@@ -44,7 +44,7 @@ nsim = switch(as.character(temp$len),
               "100" = 200,
               "1440" = 100)
 
-outfile = here::here("results", "simulations", "survey_sim", paste0("fold_", sprintf("%03d", ifold), ".rds"))
+outfile = here::here("results", "simulations", "survey_sim_smoothfirst", paste0("fold_", sprintf("%03d", ifold), ".rds"))
 if (file.exists(outfile)) {
   x = read_rds(outfile)
   if(nrow(x) >= nsim * length(boot_types) * 2) {
