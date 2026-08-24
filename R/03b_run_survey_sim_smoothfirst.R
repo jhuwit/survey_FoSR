@@ -13,7 +13,8 @@ required_packages <- c(
   "mgcv",
   "mvtnorm",
   "refund",
-  "svrep"
+  "svrep",
+  "readr",
   # "tidyfun",
   # "paletteer"
 )
@@ -30,7 +31,7 @@ if(length(missing_packages) > 0) {
 library(future)
 library(furrr)
 library(dplyr)
-
+library(readr)
 # library(tidyverse)
 library(here)
 library(gtools)

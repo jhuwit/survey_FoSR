@@ -85,7 +85,8 @@ Rnosave 06_run_mfpca_sim.R -J MFPCA_SIMR --array=220,225,249,255,261,268,279,285
 
 
 ### new
-
-Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=30G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --array=3,9,15,21,27,33,39,45,51,57,63,69,75,81,87,93,99,105,111,117,123,129,135,141,147,153,159,165,171,177,183,189,195,201,207,213,219,225,231,237,243,249,255,261,267,273,279,285,291,297,303,309,315,321,327,333,339,345,351,357,363,369,375,381,387,393,399,405,411,417,423,429,435,441,447,453,459,465,471,477,483,489,495,501,507,513,519,525,531,537,543,549,555,561,567,573,579,585,591,597
+# sensitivity analysis -- smoothing first
+Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=30G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --array=241,243,245,535,537,539,541,543,545
+# sensitivity analysis -- smoothing types
 Rnosave 03b_run_survey_sim_smoothsens.R -J SS_SMS --mem=30G -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --array=1-54 --partition=dedicated --account=sds-rcnode-1
 
