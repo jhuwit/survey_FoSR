@@ -1,3 +1,33 @@
+# Auto-install missing packages
+required_packages <- c(
+  "future",
+  "furrr",
+  "tidyverse",
+  "here",
+  "devtools",
+  "haven",
+  "survey",
+  "progress",
+  "lme4",
+  "mgcv",
+  "ggplot2",
+  "gridExtra",
+  "mvtnorm",
+  "refund",
+  "svrep",
+  "tidyfun",
+  "paletteer"
+)
+
+# Check which packages are not installed
+missing_packages <- required_packages[!required_packages %in% installed.packages()[,"Package"]]
+
+# Install missing packages
+if(length(missing_packages) > 0) {
+  message("Installing missing packages: ", paste(missing_packages, collapse = ", "))
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+
 library(future)
 library(furrr)
 library(tidyverse)
