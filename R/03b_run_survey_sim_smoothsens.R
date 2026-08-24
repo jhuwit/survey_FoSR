@@ -1,4 +1,13 @@
 ## smoothing parameter sensitivity analysis
+required_packages = c("Rfast")
+
+missing_packages <- required_packages[!required_packages %in% installed.packages()[,"Package"]]
+
+# Install missing packages
+if(length(missing_packages) > 0) {
+  message("Installing missing packages: ", paste(missing_packages, collapse = ", "))
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
 
 library(future)
 library(furrr)
@@ -7,6 +16,7 @@ library(here)
 library(readr)
 library(stringr)
 library(devtools)
+library(Rfast)
 # library(fastFMM)
 # library(haven)
 library(survey)
