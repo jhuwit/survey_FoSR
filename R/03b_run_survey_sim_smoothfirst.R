@@ -5,7 +5,8 @@ required_packages <- c(
   "purrr",
   "here",
   "devtools",
-  "haven",
+  "gtools",
+  # "haven",
   "survey",
   "progress",
   "lme4",
@@ -13,8 +14,8 @@ required_packages <- c(
   "mvtnorm",
   "refund",
   "svrep",
-  "tidyfun",
-  "paletteer"
+  # "tidyfun",
+  # "paletteer"
 )
 
 # Check which packages are not installed
@@ -32,6 +33,7 @@ library(dplyr)
 
 # library(tidyverse)
 library(here)
+library(gtools)
 library(devtools)
 # library(fastFMM)
 # library(haven)
