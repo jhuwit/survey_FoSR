@@ -21,7 +21,7 @@ library(gridExtra)
 library(svrep)
 
 
-# get beta hat
+# beta tilde: pointwise model estimates
 get_betatilde = function(data, family = "gaussian", type = "weighted",
                          model_formula = as.formula(paste0('Y~', 'X'))){
   if(!(type %in% c("weighted", "unweighted"))){
@@ -56,7 +56,7 @@ get_betatilde = function(data, family = "gaussian", type = "weighted",
 
 
 
-
+# beta hat: smooth
 get_betahat = function(betaTilde, L,
                        nknots_min = 35,
                        splines = "tp"){
@@ -73,6 +73,25 @@ get_betahat = function(betaTilde, L,
   rownames(betaHat) <- rownames(betaTilde)
   colnames(betaHat) <- 1:L
   return(betaHat)
+}
+
+# for data -- need to smooth across Y
+
+get_smoothed_y = function(data, L,
+                          nknots_min = 35,
+                          splines = "tp",
+                          model_formula = as.formula(paste0('Y~', 'X'))){
+  out_index <- grep(paste0("^", model_formula[2]), names(data))
+  Y_mat <- as.matrix(data[, out_index])
+  argvals = 1:L
+  nknots <- if (is.null(nknots_min)) round(L / 2) else min(round(L / 2), nknots_min)
+  Y_smoothed <- t(apply(Y_mat, 1, function(x) mgcv::gam(x ~ s(argvals, bs = splines,
+                                                               k = (nknots + 1)),
+                                                         method = "GCV.Cp")$fitted.values))
+  Y_smoothed = Y_smoothed |> as.data.frame() |> magrittr::set_colnames(colnames(data)[out_index])
+  data_new = bind_cols(data[,-out_index], Y_smoothed)
+  rm(Y_smoothed)
+  return(data_new)
 }
 
 
