@@ -2,7 +2,7 @@
 required_packages <- c(
   "future",
   "furrr",
-  "tidyverse",
+  "purrr",
   "here",
   "devtools",
   "haven",
@@ -10,8 +10,6 @@ required_packages <- c(
   "progress",
   "lme4",
   "mgcv",
-  "ggplot2",
-  "gridExtra",
   "mvtnorm",
   "refund",
   "svrep",
@@ -30,7 +28,9 @@ if(length(missing_packages) > 0) {
 
 library(future)
 library(furrr)
-library(tidyverse)
+library(dplyr)
+
+# library(tidyverse)
 library(here)
 library(devtools)
 library(fastFMM)
@@ -39,9 +39,9 @@ library(survey)
 library(progress)
 library(lme4)
 library(mgcv)
-library(ggplot2)
-library(gridExtra)
-library(tidyfun)
+# library(ggplot2)
+# library(gridExtra)
+# library(tidyfun)
 library(mvtnorm)
 library(refund)
 library(svrep)
@@ -87,7 +87,7 @@ if (file.exists(outfile)) {
   }}
 
 if (!dir.exists(dirname(outfile))) dir.create(dirname(outfile), recursive = TRUE)
-partial_dir = here::here("results", "simulations", "survey_sim", paste0("fold_", sprintf("%03d", ifold), "_partials"))
+partial_dir = here::here("results", "simulations", "survey_sim_smoothfirst", paste0("fold_", sprintf("%03d", ifold), "_partials"))
 if (!dir.exists(partial_dir)) dir.create(partial_dir)
 partial_files = list.files(partial_dir, pattern = "^iter_\\d+\\.rds$", full.names = TRUE)
 

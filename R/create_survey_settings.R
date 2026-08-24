@@ -1,9 +1,10 @@
 ### survey settings final
 
-library(tidyverse)
+library(tidyr)
+library(dplyr)
 
 
-settings1 = expand_grid(strata_scale = c(0, 0.125),
+settings1 = tidyr::expand_grid(strata_scale = c(0, 0.125),
                         strata_sigma = c(0, 0.05),
                         snr_b = c(0.5, 1, 5),
                         snr_eps = c(0.5, 1, 5),
