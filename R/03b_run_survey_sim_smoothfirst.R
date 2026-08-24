@@ -3,6 +3,7 @@ required_packages <- c(
   "future",
   "furrr",
   "purrr",
+  "stringr",
   "here",
   "devtools",
   "gtools",
@@ -32,6 +33,7 @@ library(future)
 library(furrr)
 library(dplyr)
 library(readr)
+library(stringr)
 # library(tidyverse)
 library(here)
 library(gtools)
