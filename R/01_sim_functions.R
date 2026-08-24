@@ -7,19 +7,6 @@ install_and_load <- function(package) {
   }
 }
 
-# library(here)
-# library(devtools)
-# library(fastFMM)
-# library(haven)
-# library(dplyr)
-# library(survey)
-# library(progress)
-# library(lme4)
-# library(mgcv)
-# library(ggplot2)
-# library(gridExtra)
-# library(svrep)
-
 
 # beta tilde: pointwise model estimates
 get_betatilde = function(data, family = "gaussian", type = "weighted",
