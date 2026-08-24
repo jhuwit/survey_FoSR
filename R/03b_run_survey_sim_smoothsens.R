@@ -180,7 +180,7 @@ if(temp$len == 1440) {
 
   lst = generate_superpopulation(
     family = temp$family,
-    I = 10e4,
+    I = 10e6,
     L = temp$len,
     snr_b = temp$snr_b,
     snr_eps = temp$snr_eps,
