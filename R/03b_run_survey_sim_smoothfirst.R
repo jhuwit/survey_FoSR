@@ -14,7 +14,7 @@ required_packages <- c(
   "mvtnorm",
   "refund",
   "svrep",
-  "readr",
+  "readr"
   # "tidyfun",
   # "paletteer"
 )
