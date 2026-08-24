@@ -34,6 +34,8 @@ library(furrr)
 library(dplyr)
 library(readr)
 library(stringr)
+library(purrr)
+
 # library(tidyverse)
 library(here)
 library(gtools)
