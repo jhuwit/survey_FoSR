@@ -28,7 +28,7 @@ source(here::here("R", "create_survey_settings.R"))
 
 lst = generate_superpopulation(
   family = "gaussian",
-  I = 10e5,
+  I = 10e6,
   L = 100,
   snr_b = 0.5,
   snr_eps = 1,
@@ -111,7 +111,7 @@ get_stats = function(inf, iter = 1) {
 }
 
 
-comb = tidyr::expand_grid(iter = seq_len(10),
+comb = tidyr::expand_grid(iter = seq_len(100),
                           inf = c(0, 10, 15))
 
 
