@@ -90,3 +90,7 @@ Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=50G --cpus-per-task=5 --
 # sensitivity analysis -- smoothing types
 Rnosave 03b_run_survey_sim_smoothsens.R -J SS_SMS --mem=50G -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --array=1-54
 
+Rnosave get_informativeness_stats.R -J GET_INF --mem=50G -o eofiles/%x_%A.out -e eofiles/%x_%A.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --time=2-00
+
+
+

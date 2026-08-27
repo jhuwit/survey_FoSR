@@ -12,7 +12,7 @@ files = list.files(here::here("results", "simulations", "survey_sim_smoothfirst"
 
 nums = sub(".*fold\\_(.+).rds.*", "\\1", basename(files)) %>% as.numeric
 
-
+length(files)
 process_file = function(x){
   f = read_rds(x)
   if(nrow(f) > 0) {

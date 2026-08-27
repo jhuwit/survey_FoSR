@@ -476,7 +476,7 @@ inds_in_stratum  = which(stratum_assignments == strata) # individuals in the str
 psu_sizes = table(psu_assignments[inds_in_stratum])
 psu_ids = names(psu_sizes)
 
-# Sample PSUs WITH replacement using PPS
+# Sample PSUs without replacement using PPS
 set.seed(strata + seed)
 selected_psus = sample(psu_ids,
                        size = num_selected_psu,
@@ -551,7 +551,7 @@ sampled_units  = inds_in_psu[rbinom(length(inds_in_psu), 1, inclusion_probs_adj)
 ```
 
 
-We can examine the difference between the adjusted an unadjusted probabilities, to confirm that the adjustment shifts the probabilities lower so that we select, on average, $50$ individuals. 
+We can examine the difference between the adjusted and unadjusted probabilities, to confirm that the adjustment shifts the probabilities lower so that we select, on average, $50$ individuals. 
 
 ```{r}
 tibble(prob = inclusion_probs_adj, type = "adjusted") %>% 

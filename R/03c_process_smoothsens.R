@@ -23,7 +23,7 @@ process_file = function(x){
       left_join(smaller_grid, by = join_by(fold))
 
     if(f$len[1] == 1440){
-      if (nrow(f) >= 100 * 4 * 2){
+      if (nrow(f) >= 100){
         f = f %>%
           mutate(id2 = as.numeric(id)) %>%
           filter(id2 <= 100) %>%
@@ -31,7 +31,7 @@ process_file = function(x){
         return(f)
       } else return(NULL)
     } else {
-      if (nrow(f) >= 200 * 4 * 2){
+      if (nrow(f) == 400){
         return(f)
       } else return(NULL)
     }
