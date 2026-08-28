@@ -107,7 +107,8 @@ if (!file.exists(here::here("results", "mims_application_1440.rds"))) {
   )
   elapsed_time = tictoc::toc(quiet = TRUE)
 
-  write_rds(cis, here::here("results", "mims_application_1440.rds"))
+  # write_rds(cis, here::here("results", "mims_application_1440.rds"))
+  write_rds(cis, here::here("results", "mims_application_1440.rds"), compress = "xz")
 } else  cis = read_rds(here::here("results", "mims_application_1440.rds"))
 
 ### ---------- make plots ------------ ###
