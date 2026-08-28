@@ -490,7 +490,7 @@ plt_final1 =
 plt_final1 =
   df1 %>%
   ggplot(aes(x = s, y = beta, group = modelf)) +
-  facet_grid(name ~  , scales = "free_y") +
+  facet_grid(name ~  ., scales = "free_y") +
   geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = modelf), alpha = .5) +
   geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = modelf), alpha = .3) +
   geom_line(aes(color = modelf), linewidth = 1.1)  +
@@ -552,9 +552,41 @@ png(here::here("manuscript", "figures", "mims_application_wide.png"),
 plt_final1 + plt_final2
 dev.off()
 
-plt_final1_ov =
+
+disagree_df =
   df1 %>%
-  ggplot(aes(x = s, y = beta, group = modelf)) +
+  select(lower.joint, upper.joint, name, modelf, s) %>%
+  mutate(sig = case_when(
+    lower.joint > 0 & upper.joint > 0 ~ 1,
+    upper.joint < 0 & lower.joint < 0 ~ 1,
+    .default = 0
+  )) %>%
+  select(name, modelf, s, sig) %>%
+  pivot_wider(names_from = modelf, values_from = sig) %>%
+  mutate(brr_sig = BRR == 1 & Unweighted == 0,
+         # unwt_sig = Unweighted == 1 & BRR == 0,
+         disagree = BRR != Unweighted) %>%
+  filter(disagree) %>%
+  mutate(modelf = "BRR", beta = 1) # for plotting
+
+disagree_df2 =
+  df2 %>%
+  select(lower.joint, upper.joint, name, modelf, s) %>%
+  mutate(sig = case_when(
+    lower.joint > 0 & upper.joint > 0 ~ 1,
+    upper.joint < 0 & lower.joint < 0 ~ 1,
+    .default = 0
+  )) %>%
+  select(name, modelf, s, sig) %>%
+  pivot_wider(names_from = modelf, values_from = sig) %>%
+  mutate(brr_sig = BRR == 1 & Unweighted == 0,
+         # unwt_sig = Unweighted == 1 & BRR == 0,
+         disagree = BRR != Unweighted) %>%
+  filter(disagree) %>%
+  mutate(modelf = "BRR", beta = 1) # for plotting
+
+plt_final1_ov =
+  ggplot(df1, aes(x = s, y = beta, group = modelf)) +
   facet_grid(name ~  ., scales = "free_y") +
   geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = modelf), alpha = .5) +
   geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = modelf), alpha = .3) +
@@ -581,6 +613,39 @@ plt_final1_ov =
   theme_sub_axis_y(text = element_text(size = 11),
                    title = element_text(size = 13))
 
+plt_final1_ov_v2 =
+  ggplot(df1, aes(x = s, y = beta, group = modelf)) +
+    facet_grid(name ~  ., scales = "free_y") +
+    geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = modelf), alpha = .5) +
+    geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = modelf), alpha = .3) +
+    geom_line(aes(color = modelf), linewidth = 1.1)  +
+    geom_point(data = extra_rows %>% filter(grepl("Int", name) | grepl("Age", name)), aes(x = 60, y = min), alpha = 0) +
+    geom_point(data = extra_rows %>% filter(grepl("Int", name) | grepl("Age", name)), aes(x = 60, y = max), alpha = 0) +
+    theme_grey() +
+    geom_hline(
+      data = tibble(name = factor(setdiff(levels(df1$name), "Intercept")), levels = c("Age 30-49", "Age 50-64", "Age 65+")),
+      aes(yintercept = 0),
+      linetype = "dashed"
+    ) +
+    scale_y_continuous(breaks=seq(-100, 100, 2)) +
+    scale_x_continuous(breaks= c(60, seq(240, 1440, 4 * 60)), labels = c("01:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00")) +
+    labs(x = "Hour of Day", y = "Monitor Independent Movement Summary (MIMS)", fill = "Model", color = "Model") +
+    theme(strip.text = element_text(size = 12),
+          palette.color.discrete = c(col2, col1),
+          palette.fill.discrete = c(col2, col1)) +
+    theme_sub_legend(position = "bottom",
+                     text = element_text(size = 12),
+                     title = element_text(size = 13)) +
+    theme_sub_axis_x(text = element_text(size = 11),
+                     title = element_text(size = 13)) +
+    theme_sub_axis_y(text = element_text(size = 11),
+                     title = element_text(size = 13)) +
+    geom_rect(data = disagree_df %>% filter(brr_sig),
+              aes(x = s, y = -6, height = 1, width = 1), fill = "#E51932") +
+    geom_rect(data = disagree_df %>% filter(!brr_sig),
+              aes(x = s, y = -6, height = 1, width = 1), fill = "#19B2FF")
+    # RED: BRR signif, unwtd not signif
+    # BLUE: unwtd signif, BRR not
 
 pfov = df2 %>%
   ggplot(aes(x = s, y = beta, group = modelf)) +
@@ -609,9 +674,51 @@ pfov = df2 %>%
   theme_sub_axis_y(text = element_text(size = 11),
                    title = element_text(size = 13))
 
+pfov_v2 = df2 %>%
+  ggplot(aes(x = s, y = beta, group = modelf)) +
+  facet_grid(name ~ ., scales = "free_y") +
+  geom_ribbon(aes(x = s, ymin = lower, ymax = upper, fill = modelf), alpha = .5) +
+  geom_ribbon(aes(x = s, ymin = lower.joint, ymax = upper.joint, fill = modelf), alpha = .3) +
+  geom_line(aes(color = modelf), linewidth = 1.1)  +
+  geom_point(data = extra_rows %>% filter(!(grepl("Int", name) | grepl("Age", name))), aes(x = 60, y = min), alpha = 0) +
+  geom_point(data = extra_rows %>% filter(!(grepl("Int", name) | grepl("Age", name))), aes(x = 60, y = max), alpha = 0) +
+  theme_grey() +
+  geom_hline(
+    aes(yintercept = 0),
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(breaks=seq(-100, 100, 2)) +
+  scale_x_continuous(breaks= c(60, seq(240, 1440, 4 * 60)), labels = c("01:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00")) +
+  labs(x = "Hour of Day", y = "", fill = "Model", color = "Model") +
+  theme(strip.text = element_text(size = 12),
+        palette.color.discrete = c(col2, col1),
+        palette.fill.discrete = c(col2, col1)) +
+  theme_sub_legend(position = "bottom",
+                   text = element_text(size = 12),
+                   title = element_text(size = 13)) +
+  theme_sub_axis_x(text = element_text(size = 11),
+                   title = element_text(size = 13)) +
+  theme_sub_axis_y(text = element_text(size = 11),
+                   title = element_text(size = 13)) +
+  geom_rect(data = disagree_df2 %>% filter(brr_sig),
+            aes(x = s, y = -6, height = 1, width = 1), fill = "#E51932") +
+  geom_rect(data = disagree_df2 %>% filter(!brr_sig),
+            aes(x = s, y = -6, height = 1, width = 1), fill = "#19B2FF")
+
+
 png(here::here("manuscript", "figures", "mims_application_wide_overlap.png"),
     width = 12, height = 8, res = 400, units = "in")
 plt_final1_ov + pfov + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
+png(here::here("manuscript", "figures", "mims_application_wide_highlight.png"),
+    width = 12, height = 8, res = 400, units = "in")
+plt_final1_ov_v2 + pfov_v2 + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
+svg(here::here("manuscript", "figures", "mims_application_wide_highlight.svg"),
+    width = 12, height = 8)
+plt_final1_ov_v2 + pfov_v2 + plot_layout(guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
 

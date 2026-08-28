@@ -92,5 +92,9 @@ Rnosave 03b_run_survey_sim_smoothsens.R -J SS_SMS --mem=50G -o eofiles/%x_%A_%a.
 
 Rnosave get_informativeness_stats.R -J GET_INF --mem=50G -o eofiles/%x_%A.out -e eofiles/%x_%A.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --time=2-00
 
+# uninformative, no strata PSU effects
+Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=90G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --array=19
+# informative, no strata PSU effects
+Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=90G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --array=25
 
 
