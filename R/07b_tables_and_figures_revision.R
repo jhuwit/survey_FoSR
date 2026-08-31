@@ -32,9 +32,14 @@ all =
          label = glue::glue("Family: {family}, L: {len}"),
          type = factor(type, levels = c("smooth_second", "smooth_first"), labels = c("Smooth after estimation", "Smooth before estimation")))
 
+all_small =
+  all |>
+  filter(strata_scale > 0, inf_level == 10)
+
+
 # figure comparing MISE in smoothing before vs. after
 p =
-  all |>
+  all_small |>
   filter(boot_type == "weighted") |>
   mutate(len = factor(glue::glue("L = {len}"), levels = c("L = 50", "L = 100")),
          family = factor(family, levels = c("gaussian", "binomial", "poisson"), labels = c("Gaussian", "Binomial", "Poisson"))) |>
@@ -73,8 +78,52 @@ png(here::here("manuscript", "figures", "smooth_order.png"),
 p
 dev.off()
 
-## tables
 all |>
+  filter(boot_type == "weighted", family == "gaussian", len == 50) |>
+  ggplot(aes(x = var, y = lMISE, fill = type)) +
+  geom_boxplot(
+    box.colour = "black",
+    median.color = "black",
+    median.linewidth = .9,
+    staplewidth = 0.5, # show staple
+    outlier.size = 0.5,
+    outlier.alpha = 0.5,
+  ) +
+  stat_summary(fun = mean,
+               geom = "point",
+               color = "black",
+               # aes(shape = type),
+               size = 2,
+               position = position_dodge(width = 0.75)) +
+  theme(strip.text = element_text(size = 14)) +
+  # palette.color.discrete = cols[1:2],
+  theme_sub_legend(position = "bottom",
+                   text = element_text(size = 14),
+                   title = element_text(size = 15)) +
+  theme_sub_axis(text= element_text(size = 12),
+                 title = element_text(size = 15)) +
+  theme_sub_panel(grid.major.x = element_blank(),
+                  grid.minor.x = element_blank()) +
+  facet_grid(factor(inf_level) ~ factor(strata_sigma), scales = "free_y") +
+  scale_x_discrete(labels = c("Intercept", "X"), name = "Variable") +
+  labs(y = expression(log[10]~"Mean Integrated Squared Error"))  +
+  scale_fill_manual(values = c("#B6DBFFFF", "#924900FF"), name = "Smooth order")
+
+all |>
+  filter(strata_sigma == 0, var == "x", !grepl("weight", boot_type), len == 50, family == "gaussian") |>
+  mutate(cover_pw = cover_pw / len) |>
+  group_by(inf_level, boot_type, type) |>
+  summarize(cover_pw = mean(cover_pw),
+            cover_joint = mean(cover_joint))
+
+all |>
+  filter(strata_sigma == 0, var != "x", !grepl("weight", boot_type), len == 50, family == "gaussian") |>
+  mutate(cover_pw = cover_pw / len) |>
+  group_by(inf_level, boot_type, type) |>
+  summarize(cover_pw = mean(cover_pw),
+            cover_joint = mean(cover_joint))
+## tables
+all_small |>
   filter(var == "x", !grepl("weight", boot_type)) |>
   mutate(cover_pw = cover_pw / len) |>
   mutate(family = factor(family, levels = c("gaussian", "binomial", "poisson"), labels = c("Gaussian", "Binomial", "Poisson"))) |>
@@ -90,7 +139,7 @@ all |>
   select(-V3) |>
   kable(format = "latex", booktabs = TRUE)
 
-all |>
+all_small |>
   filter(var != "x", !grepl("weight", boot_type)) |>
   mutate(cover_pw = cover_pw / len) |>
   mutate(family = factor(family, levels = c("gaussian", "binomial", "poisson"), labels = c("Gaussian", "Binomial", "Poisson"))) |>
@@ -106,7 +155,7 @@ all |>
   select(-V3) |>
   kable(format = "latex", booktabs = TRUE)
 
-all |>
+all_small |>
   filter(var == "x", !grepl("weight", boot_type)) |>
   mutate(cover_pw = cover_pw / len) |>
   mutate(family = factor(family, levels = c("gaussian", "binomial", "poisson"), labels = c("Gaussian", "Binomial", "Poisson"))) |>
@@ -122,7 +171,7 @@ all |>
   select(-V3) |>
   kable(format = "latex", booktabs = TRUE)
 
-all |>
+all_small |>
   filter(var != "x", !grepl("weight", boot_type)) |>
   mutate(cover_pw = cover_pw / len) |>
   mutate(family = factor(family, levels = c("gaussian", "binomial", "poisson"), labels = c("Gaussian", "Binomial", "Poisson"))) |>
@@ -144,13 +193,13 @@ rm(list = ls())
 
 
 
-ssens = read_rds(here("results", "simulations", "all_survey_res_smoothsens.rds")) |>
+ssens = read_rds(here("results", "simulations", "all_small_survey_res_smoothsens.rds")) |>
   select(MISE, cover_joint, cover_pw, var, family, len, nknots_spec, splines, method) |>
   mutate(cover_pw = cover_pw / len) |>
   mutate(len = factor(glue::glue("L = {len}"), levels = c("L = 50", "L = 100")),
          family = factor(family, levels = c("gaussian", "binomial", "poisson"), labels = c("Gaussian", "Binomial", "Poisson")),
          splines = factor(splines, levels = c("tp", "cr", "ps"), labels = c("tp (default)", "cr", "ps")))
-# regular = read_rds(here("results", "simulations", "all_survey_res.rds")) |>
+# regular = read_rds(here("results", "simulations", "all_small_survey_res.rds")) |>
 #   filter(boot_type == "BRR", family %in% c("binomial", "gaussian", "poisson"), len %in% c(50, 100),
 #          snr_b == 0.5, strata_sigma == 0.05, strata_scale == 0.125, inf_level == 10, In == 100) |>
 #   filter((family !="gaussian" & is.na(snr_eps)) | (family == "gaussian" & snr_eps == 1)) |>
