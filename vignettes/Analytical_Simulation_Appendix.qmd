@@ -699,3 +699,220 @@ mean_df %>%
   theme_light(base_size = 14)
 
 ```
+
+### Contextualizing informative sampling 
+
+Informativeness level refers to the relationship between the mean functional outcome for each individual and their selection probability. Let $\bar{Y}_i = \frac{1}{L}\sum_{l=1}^LY_i(s_l)$ denote the mean functional outcome for individual $i$. Then the second-stage selection probability, $\pi_{2i} \propto \text{logit}^{-1}(\gamma \cdot \bar{Y}_i), \gamma \in \{0, 10, 15\}$, is proportional to the mean functional outcome multiplied by $\gamma$, the ``informativeness scaling factor.'' When $\gamma = 0$, the selection probability is independent of the functional outcome. As $\gamma$ increases, the selection probability is higher for individuals with higher mean functional outcomes. The practical impact of this can be seen in the figure above: under informative sampling, large differences exist in the functional outcomes between different survey weight tertiles, while this is not the case under random sampling. 
+
+To add further context, we can investigate the correlation between the mean functional outcome and the selection probability, under different values of $\gamma$. 
+
+```{r}
+#| cache: true 
+
+sample_from_population_wor = function(X_des, # design matrix
+                                      Y_obs, # y matrix
+                                      I_n = 500, # subjects in each psu-strata combination
+                                      num_strata = 30,  # total strata
+                                      stratum_assignments, # assignment to ea strata
+                                      num_selected_psu = 2,
+                                      dirichlet_probs, # stratum probabilities
+                                      psu_assignments, # assignment to psu (w/in strata)
+                                      L = 50, # length of fnl domain
+                                      seed = 1,
+                                      inf_level = 1,
+                                      compression = 3,
+                                      family = "gaussian"
+){
+  I = nrow(X_des)
+  X1 = X_des[, 2]
+  # select strata (use all for now)
+  selected_strata = 1:num_strata
+  p_strata_design  = dirichlet_probs[selected_strata]
+
+  final_sample  = c() # to store final sample ids
+  p1  = rep(NA, I) # stage 1 selection probability
+  p2  = rep(NA, I) # stage 2 selection probability
+  p_overall  = rep(NA, I) # overall selection probability
+  psus  = c() # to store PSUs
+
+  # within each strata, select PSU with replacement using PPS
+  for (strata in 1:num_strata) {
+    # strata = 1
+    # individuals in the strata
+    inds_in_stratum  = which(stratum_assignments == strata)
+
+    # Get PSU sizes in this stratum
+    psu_sizes = table(psu_assignments[inds_in_stratum])
+    psu_ids = names(psu_sizes)
+
+    # Sample PSUs WITH replacement using PPS
+    set.seed(strata + seed)
+    selected_psus = sample(psu_ids,
+                           size = num_selected_psu,
+                           replace = FALSE,
+                           prob = psu_sizes)
+
+    psu_probs  = psu_sizes / sum(psu_sizes)  # PPS
+    # probability of selection is 1 - (p(not selected both times))
+    # psu_prob_selected  = 1 - (1 - psu_probs) ^ num_selected_psu
+    # names(psu_prob_selected)  = psu_ids
+
+    psu_prob_selected = map_dbl(.x = match(selected_psus, psu_ids),
+                                .f = get_p_i,
+                                psu_probs)
+
+    names(psu_prob_selected)  = selected_psus
+    # within each selected PSU select individuals based on X1
+    for (psu in selected_psus) {
+      inds_in_psu  = which(psu_assignments == psu &
+                             stratum_assignments == strata)
+      if (inf_level == 0) {
+        # Uniform sampling
+        n = length(inds_in_psu)
+        inclusion_probs = rep(1 / n, n)
+      } else {
+        # Compute mean outcome in PSU
+        y_mean = rowMeans(Y_obs[inds_in_psu, ])
+
+        # Compute inclusion score depending on family
+        incl_score = switch(family,
+                             "gaussian" = y_mean * inf_level,
+                             "poisson"  = log(y_mean) * inf_level,
+                             "binomial" = qlogis(pmin(pmax(y_mean, 1e-6), 1 - 1e-6)) * inf_level,
+                             stop("Unknown family"))
+
+        # Apply compression and map to probabilities
+        score_compressed = pmax(pmin(incl_score, compression), -compression)
+        inclusion_probs = plogis(score_compressed)
+
+
+      }
+
+      inclusion_probs_adj  = inclusion_probs / sum(inclusion_probs) * I_n
+      inclusion_probs_adj[inclusion_probs_adj > 1]  = 1
+
+      set.seed(strata + seed + which(selected_psus == psu)) # ensure reproducibility
+      sampled_units  = inds_in_psu[rbinom(length(inds_in_psu), 1, inclusion_probs_adj) == 1]
+
+      final_sample  = c(final_sample, sampled_units)
+      psus  = c(psus, rep(psu, length(sampled_units)))
+      p_psu  = psu_prob_selected[which(names(psu_prob_selected) == psu)]
+
+      p1[inds_in_psu]  = p_psu
+      p2[inds_in_psu]  = inclusion_probs_adj
+      p_overall[inds_in_psu]  = p_psu * inclusion_probs_adj
+    }
+  }
+
+
+  survey_weights  = 1 / p_overall
+
+
+  dat.sim  = data.frame(
+    ID = final_sample,
+    X = X1[final_sample],
+    strata = stratum_assignments[final_sample],
+    psu = sub(".*\\_", "", psus),
+    weight = survey_weights[final_sample],
+    p_stage1 = p1[final_sample],
+    p_stage2 = p2[final_sample]
+  )
+
+
+  Y_sample  = data.frame(Y_obs[final_sample, ])
+  colnames(Y_sample)  = paste0("Y", 1:L)
+
+  data =  cbind(dat.sim, Y_sample)
+  return(data)
+}
+get_ratio = function(df, p1 = 0.25, p2 = 0.75){
+    x1 =
+      df |>
+      filter(ptile <= p1) |>
+      summarize(p = mean(p_overall)) |>
+      pull(p)
+
+    x2 =
+      df |>
+      filter(ptile >= p2) |>
+      summarize(p = mean(p_overall)) |>
+      pull(p)
+
+    return(x2/x1)
+  }
+
+get_stats = function(inf, iter = 1) {
+
+
+    set.seed(iter)
+    data = sample_from_population_wor(
+      X_des = X_des,
+      Y_obs = Y_obs,
+      L = 50,
+      I_n = 100,
+      num_strata = 30,
+      stratum_assignments = stratum_assignments,
+      psu_assignments = psu_assignments,
+      dirichlet_probs = dirichlet_probs,
+      seed = iter,
+      inf_level = inf,
+      compression = 2,
+      family = "gaussian"
+    )
+
+
+    Y_mat =
+      data |>
+      select(starts_with("Y")) |>
+      as.matrix()
+
+    ybar = rowMeans(Y_mat)
+
+    data_means =
+      data |>
+      select(-starts_with("Y")) |>
+      mutate(ybar = ybar,
+             p_overall = p_stage1 * p_stage2)
+
+
+    c_pear = cor(data_means$p_overall, data_means$ybar, method = "pearson")
+    c_spear = cor(data_means$p_overall, data_means$ybar, method = "spearman")
+
+    data_means =
+      data_means |>
+      mutate(ptile = percent_rank(ybar))
+
+    ratio_75 = get_ratio(data_means, 0.25, 0.75)
+    ratio_9 = get_ratio(data_means, 0.1, 0.9)
+
+    return(tibble(c_pear = c_pear,
+                  c_spear = c_spear,
+                  ratio_75 = ratio_75,
+                  ratio_9 = ratio_9,
+                  iter = iter,
+                  inf_level = inf))
+
+  }
+
+
+comb = tidyr::expand_grid(iter = seq_len(100), inf = c(0, 10, 15))
+
+
+res = map2_dfr(.x = comb$inf, .y = comb$iter, .f = get_stats)
+```
+
+```{r}
+res |>
+  pivot_longer(cols = contains("c_")) |>
+  ggplot(aes(x = name, y = value, fill = factor(inf_level))) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_x_discrete(labels = c("Pearson", "Spearman"), name = "Correlation type") +
+  scale_y_continuous(name = "Correlation") +
+  labs(title = "Correlation between mean functional outcome and selection probability") +
+  scale_fill_manual(values = c("#FFE099FF", "#F76D5EFF", "#A50021FF"),
+                    name = "Informativeness", labels = c("Uniform", "Medium", "High")) +
+  geom_hline(aes(yintercept = 0), linetype = "dashed") +
+  theme_light(base_size = 14) +
+  theme(legend.position = c(.9, .15))
+```
+
