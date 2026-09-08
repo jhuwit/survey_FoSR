@@ -32,7 +32,7 @@ Rnosave 03_run_sim_survey.R -J SIM_HM --mem=50G --cpus-per-task=4 --nodes=1 --nt
 Rnosave 03_run_ss_noise.R -J SSNOISE --mem=40G --cpus-per-task=4 --nodes=1 --ntasks=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=lkoffma2@jh.edu -t 5-00 --array=421-600 --qos=shared-400-4
 
 Rnosave 03_run_sim_1440.R -J S1440_50 --mem=90G --array=50,51,52,53,54,55,56,57,58,59,60,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120  --cpus-per-task=8 --ntasks=1 --nodes=1 -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=lkoffma2@jh.edu  -t 10-00 --qos=shared-400-4
-Rnosave 03_run_sim_1440o.R -J S1440o --mem=90G --array=41,97,98,99,100,101,102 --cpus-per-task=8 --nodes=1 --ntasks=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=lkoffma2@jh.edu -t 10-00
+Rnosave 03_run_sim_1440.R -J S1440o --mem=90G --array=41,97,98,99,100,101,102 --cpus-per-task=8 --nodes=1 --ntasks=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=lkoffma2@jh.edu -t 10-00
 
 
 Rnosave 06_run_mfpca_sim.R -J MFPCA_SIMR --array=145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,349,350,351,352,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,368,369,370,371,372,373,374,375,376,377,378,379,380,381,382,383,384,385,386,387,388,389,390,391,392,393,394,395,396,397,398,399,400,401,402,403,404,405,406,407,408,409,410,411,412,413,414,415,416,417,418,419,420 --mem=30G --time=3-00 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=lkoffma2@jh.edu
@@ -98,3 +98,4 @@ Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=90G --cpus-per-task=5 --
 Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=90G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --array=25
 
 
+Rnosave 08a_run_sim_empirical_1440_ml.R -J EMP_SIM_ML --array=1-4 --mem=20G --cpus-per-task=12 --nodes=1 --ntasks=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu -t 3-00

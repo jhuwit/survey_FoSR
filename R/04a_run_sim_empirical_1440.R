@@ -1,6 +1,6 @@
 ## empirical sim
 library(tidyverse)
-source(here::here("R_cp", "01_sim_functions.R"))
+source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "utils.R"))
 library(future)
 library(furrr)

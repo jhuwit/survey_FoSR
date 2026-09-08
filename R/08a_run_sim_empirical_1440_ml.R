@@ -5,7 +5,7 @@ source(here::here("R", "utils.R"))
 library(future)
 library(furrr)
 force = FALSE
-pa_df = read_rds(here::here("data", "processed_mims_multilevel.rds")) |>
+pa_df = read_rds(here::here("data", "mims_multilevel_imputed.rds")) |>
   mutate(SEQN = as.character(SEQN))
 pa_df_sl = read_rds(here::here("data", "mims_covariates.rds")) |>
   select(-starts_with("min"))
@@ -15,10 +15,12 @@ pa_df = pa_df |>
             by = "SEQN")
 
 ## NEED TO DO MFPCA
+#
+# pa_df =
+#   pa_df |>
+#   drop_na()
 
-pa_df =
-  pa_df |>
-  drop_na()
+
 L = 1440
 n_sim = 1000
 n_boot = 500
@@ -28,7 +30,7 @@ nsim = 200
 settings = expand_grid(iter = 1:nsim,
                        weight_type = c("uniform", "nh_weights", "mims_weights", "combo_weights"))
 ifold = get_fold()
-ifold = 1
+# ifold = 1
 weight_curr = settings[ifold,]$weight_type
 iter = settings[ifold,]$iter
 
