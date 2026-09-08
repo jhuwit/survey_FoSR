@@ -2,6 +2,9 @@
 # library(tidyverse)
 if (!require("progressr")) install.packages("progressr", repos = "https://cloud.r-project.org")
 if (!require("future.apply")) install.packages("future.apply", repos = "https://cloud.r-project.org")
+if (!require("progress")) install.packages("progress", repos = "https://cloud.r-project.org")
+if (!require("assertthat")) install.packages("assertthat", repos = "https://cloud.r-project.org")
+
 
 library(dplyr)
 library(tidyr)
