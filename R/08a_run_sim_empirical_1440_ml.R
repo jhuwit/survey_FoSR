@@ -1,5 +1,9 @@
 ## empirical sim
-library(tidyverse)
+# library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(purrr)
 source(here::here("R", "01_sim_functions.R"))
 source(here::here("R", "utils.R"))
 library(future)
