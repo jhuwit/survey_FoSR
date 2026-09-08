@@ -5,7 +5,7 @@ library(patchwork)
 nsim = 200
 cols = c("#E69F00FF",  "#56B4E9FF", "#009E73FF", "#CC79A7FF")
 L = 1440
-
+force = FALSE
 if (!file.exists(here::here("results", "simulations", "all_empirical_sim_res.rds")) || force) {
   settings = expand_grid(iter = 1:nsim,
                         weight_type = c("uniform", "nh_weights", "mims_weights", "combo_weights")) %>%
@@ -111,7 +111,7 @@ p2 = res_df %>%
   theme_sub_axis(text= element_text(size = 10),
                  title = element_text(size = 13)) +
   guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
-  labs(x = "Weighting Scheme", y = "log Mean Integrated Squared Error (MISE)", color = "Estimation Type", fill = "Estimation Type", shape = "Estimation Type") +
+  labs(x = "Weighting Scheme",y = expression(log[10]~"Mean Integrated Squared Error"), color = "Estimation Type", fill = "Estimation Type", shape = "Estimation Type") +
   guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
   theme_sub_axis_x(text = element_text(angle = 30))
 
@@ -178,9 +178,31 @@ p4 = res_df %>%
   geom_hline(aes(yintercept = 0.95), color = cols[4], linetype = "dashed", linewidth = 1.2) +
   scale_y_continuous(breaks = c(seq(0, 0.8, 0.2), 0.95, 1))
 
+tbl = res_df %>%
+  mutate(boot_type = factor(boot_type, levels = c("unweighted", "weighted", "BRR"), labels = c("Unweighted", "Weighted", "BRR")),
+         setting = factor(setting, levels = c("uniform", "nh_weights", "mims_weights", "combo_weights"),
+                          labels = c("Uniform", "NHANES", "MIMS", "NHANES&MIMS")),
+         var = factor(var, labels = c("Intercept", "Sex Coefficient"))) %>%
+  group_by(var, boot_type, setting) %>%
+  summarize(cover_joint = mean(cover_joint)) |>
+  pivot_wider(names_from = setting, values_from = cover_joint) |>
+  ungroup() |>
+  group_by(var) |>
+  gt::gt(caption = "Joint Coverage", row_group_as_column = TRUE) |>
+  gt::fmt_number(decimals = 2) |>
+  gt::data_color(palette = cols,
+             columns = boot_type) |>
+  gt::cols_label("boot_type" = "") |>
+  gt::tab_caption("Joint Coverage")
+
 png(here::here("manuscript", "figures", "empirical_sim_fig.png"), width = 12, height = 10, res = 350,
     units = "in")
 (p1 + p2) / (p3 + p4) + plot_layout(axis_titles = "collect") + plot_annotation(tag_levels = "A")
+dev.off()
+
+png(here::here("manuscript", "figures", "empirical_sim_fig_v2.png"), width = 12, height = 10, res = 350,
+    units = "in")
+(p1 + p2) / (p3 + wrap_table(tbl, panel = "full", space = "fixed") + ggtitle("Joint Coverage")) + plot_layout(axis_titles = "collect") + plot_annotation(tag_levels = "A")
 dev.off()
 # svg 1300 x 850
 
