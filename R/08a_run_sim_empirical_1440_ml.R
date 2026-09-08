@@ -1,5 +1,6 @@
 ## empirical sim
 # library(tidyverse)
+if (!require("progressr")) install.packages("progressr", repos = "https://cloud.r-project.org")
 library(dplyr)
 library(tidyr)
 library(readr)
