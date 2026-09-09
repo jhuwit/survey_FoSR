@@ -98,4 +98,4 @@ Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=90G --cpus-per-task=5 --
 Rnosave 03b_run_survey_sim_smoothfirst.R -J SS_LM --mem=90G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=dedicated --account=sds-rcnode-1 --array=25
 
 
-Rnosave 08a_run_sim_empirical_1440_ml.R -J EMP_SIM_ML --array=1-4 --mem=20G --cpus-per-task=12 --nodes=1 --ntasks=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu -t 3-00
+Rnosave 08a_run_sim_empirical_1440_ml.R -J EMP_SIM_ML --array=1-800 --mem=15G --cpus-per-task=12 --nodes=1 --ntasks=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu -t 3-00
