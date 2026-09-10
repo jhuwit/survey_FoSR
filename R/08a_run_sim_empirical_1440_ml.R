@@ -41,6 +41,8 @@ settings = expand_grid(iter = 1:nsim,
                        weight_type = c("uniform", "nh_weights", "mims_weights", "combo_weights"))
 ifold = get_fold()
 # ifold = 1
+
+ifold = 743
 weight_curr = settings[ifold,]$weight_type
 iter = settings[ifold,]$iter
 
