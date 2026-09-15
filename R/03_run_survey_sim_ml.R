@@ -33,7 +33,7 @@ options(survey.lonely.psu = "adjust")
 
 
 ifold = get_fold()
-ifold = 279
+
 
 temp = settings[ifold,]
 
@@ -72,7 +72,7 @@ if(length(partial_files) >= nsim) {
 
 lst = generate_superpopulation_ml(
   family = temp$family,
-  I = 10e5,
+  I = 10e6,
   L = temp$len,
   snr_b = temp$snr_b,
   snr_eps = temp$snr_eps,
