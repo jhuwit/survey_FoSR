@@ -40,7 +40,7 @@ generate_superpopulation_ml = function(I = 10e6, # size of superpopulation
             "signal to noise ratios must be greater than 0" = snr_b > 0 | is.na(snr_b),
             "signal to noise ratios must be greater than 0" = snr_eps > 0 | is.na(snr_eps))
   set.seed(seed)
-  visits_per_subj = pmax(runif(I, min = 0, max = 7), 1)
+  visits_per_subj = round(runif(I, min = 0, max = 7), 0)
   subj_vec = rep(1:I, visits_per_subj)
   n = sum(visits_per_subj)
 
