@@ -19,7 +19,7 @@ library(refund)
 library(svrep)
 
 
-generate_superpopulation = function(I = 10e6, # size of superpopulation
+generate_superpopulation_ml = function(I = 10e6, # size of superpopulation
                                     L = 50, # length of functional domain
                                     family = "gaussian",
                                     seed = 4574,
@@ -28,7 +28,9 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
                                     psu_factor = 0.5,
                                     strata_scale = 0.125, # strata scaling factor
                                     snr_b = 1, # signal noise ratio for random to fixed effects
-                                    snr_eps = 1 # signal to noise for gaussian
+                                    snr_eps = 1, # signal to noise for gaussian
+                                    snr_u = 1, # signal to noise ratio for individual REs to strata/PSU REs
+                                    J = 5 # mean # visits per person
 ){
   stopifnot("family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"),
             "I must be greater than 1000" = I > 1000,
@@ -37,10 +39,13 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
             "strata_sigma, psu_factor and strata_scale must be greater than or equal to 0" = all(c(strata_sigma, psu_factor, strata_scale) >= 0),
             "signal to noise ratios must be greater than 0" = snr_b > 0 | is.na(snr_b),
             "signal to noise ratios must be greater than 0" = snr_eps > 0 | is.na(snr_eps))
-
+  set.seed(seed)
+  visits_per_subj = pmax(rpois(I, J), 1)
+  subj_vec = rep(1:I, visits_per_subj)
+  n = sum(visits_per_subj)
 
   set.seed(seed)
-  X_des  = cbind(1, rnorm(I, 0, 2))
+  X_des  = cbind(1, rnorm(n, 0, 2))
 
   ## simulate true beta based on scenarios
   grid  = seq(0, 1, length = L)
@@ -72,9 +77,14 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     psu_assignments[stratum_assignments == s]  = paste0(s, "_", psu_in_stratum)
   }
 
+  stratum_assignments_visit = rep(stratum_assignments, times = visits_per_subj)
+  psu_assignments_visit = rep(psu_assignments, times = visits_per_subj)
+
   # case where there's no strata-specific noise
   if (strata_sigma == 0 & strata_scale == 0){
-    lin_pred  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) + X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    # lin_pred  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) + X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    fixef_signal  = matrix(rep(beta_fixed[1, ], n), nrow = n, byrow = TRUE) + X_des[, 2] * matrix(rep(beta_fixed[2, ], n), nrow = n, byrow = TRUE)
+    # dim(lin_pred)
   } else if (strata_sigma == 0 & strata_scale > 0) {
     set.seed(seed)
     stratum_scaling  = rnorm(num_strata, mean = 1, sd = strata_scale)
@@ -85,16 +95,12 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
              byrow = TRUE)
 
     # assign to individuals
-    beta1_by_indiv  = beta1_by_stratum[stratum_assignments, ]
-    fixef_signal  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
-      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    beta1_by_indiv  = beta1_by_stratum[stratum_assignments_visit, ]
+    fixef_signal  = matrix(rep(beta_fixed[1, ], n), nrow = n, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], n), nrow = n, byrow = TRUE)
 
-    slope_re  = (stratum_scaling[stratum_assignments] - 1) *
-      matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
-    ranef  = slope_re
-    ranef  = sd(as.vector(fixef_signal)) / sd(as.vector(ranef)) / snr_b * ranef
-    rm(slope_re)
-    lin_pred = fixef_signal + ranef
+    ranef_strata_psu  = (stratum_scaling[stratum_assignments_visit] - 1) *
+      matrix(rep(beta_fixed[2, ], n), nrow = n, byrow = TRUE)
 
   } else if (strata_sigma > 0 & strata_scale == 0) {
     psu_sigma = sqrt(strata_sigma ^ 2 * psu_factor)
@@ -119,17 +125,14 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     psu_random_effects  = psu_scores %*% t(Phi)
 
 
-    strata_effects_indiv  = strata_random_effects[stratum_assignments, ]
-    psu_effects_indiv  = psu_random_effects[as.numeric(factor(psu_assignments)), ]
-    random_effects  = strata_effects_indiv + psu_effects_indiv
+    strata_effects_indiv  = strata_random_effects[stratum_assignments_visit, ]
+    psu_effects_indiv  = psu_random_effects[as.numeric(factor(psu_assignments_visit)), ]
+    ranef_strata_psu  = strata_effects_indiv + psu_effects_indiv
 
     rm(strata_effects_indiv, psu_effects_indiv)
 
-    fixef_signal  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
-      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
-    ranef  = sd(as.vector(fixef_signal)) / sd(as.vector(random_effects)) / snr_b * random_effects
-    rm(random_effects)
-    lin_pred = fixef_signal + ranef
+    fixef_signal  = matrix(rep(beta_fixed[1, ], n), nrow = n, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], n), nrow = n, byrow = TRUE)
 
   } else { # random effects and slope modification
     psu_sigma = sqrt(strata_sigma ^ 2 * psu_factor)
@@ -154,9 +157,9 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     psu_random_effects  = psu_scores %*% t(Phi)
 
 
-    strata_effects_indiv  = strata_random_effects[stratum_assignments, ]
-    psu_effects_indiv  = psu_random_effects[as.numeric(factor(psu_assignments)), ]
-    random_effects  = strata_effects_indiv + psu_effects_indiv
+    strata_effects_indiv  = strata_random_effects[stratum_assignments_visit, ]
+    psu_effects_indiv  = psu_random_effects[as.numeric(factor(psu_assignments_visit)), ]
+    ranef  = strata_effects_indiv + psu_effects_indiv
 
     rm(strata_effects_indiv, psu_effects_indiv)
 
@@ -170,28 +173,43 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
              byrow = TRUE)
 
     # assign to individuals
-    beta1_by_indiv  = beta1_by_stratum[stratum_assignments, ]
+    beta1_by_indiv  = beta1_by_stratum[stratum_assignments_visit, ]
 
     # adjust random effect based on signal to noise parameters
-    fixef_signal  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
-      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    fixef_signal  = matrix(rep(beta_fixed[1, ], n), nrow = n, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], n), nrow = n, byrow = TRUE)
 
     # include stratum-specific slope variation in the random effects
-    slope_re  = (stratum_scaling[stratum_assignments] - 1) *
-      matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
-    ranef  = slope_re + random_effects
-    ranef  = sd(as.vector(fixef_signal)) / sd(as.vector(ranef)) / snr_b * ranef
-    rm(random_effects)
-    lin_pred = fixef_signal + ranef
+    slope_re  = (stratum_scaling[stratum_assignments_visit] - 1) *
+      matrix(rep(beta_fixed[2, ], n), nrow = n, byrow = TRUE)
+    ranef_strata_psu  = slope_re + ranef
+    rm(slope_re, ranef)
   }
 
 
-  # temp = matrix(c(1, 2, 3, 4, 5, 6), ncol = 3, byrow = TRUE) # making sure I am doing dimensions right!
-  # matrix(rnorm(n = 6, mean = as.vector(t(temp)), sd = .001), nrow = 2, ncol = 3, byrow = TRUE)
+  psi_true = matrix(NA, 2, L)
+  psi_true[1,] = (1.5 - sin(2*grid*pi) - cos(2*grid*pi) )
+  psi_true[1,] = psi_true[1,] / sqrt(sum(psi_true[1,]^2))
+  psi_true[2,] = sin(4*grid*pi)
+  psi_true[2,] = psi_true[2,] / sqrt(sum(psi_true[2,]^2))
 
-  # temp = matrix(c(10, -5, 10, -5, -5, 10), ncol = 3, byrow = TRUE) # making sure I am doing dimensions right!
-  # matrix(rbinom(n = 6, size = 1, prob = plogis(as.vector(t(temp)))), nrow = 2, ncol = 3, byrow = TRUE)
-  # rbinom(n = 6, size = 1, prob = plogis(as.vector(t(temp))))
+  set.seed(seed)
+  c_true = mvtnorm::rmvnorm(I, mean = rep(0, 2), sigma = diag(c(3, 1.5))) ## simulate score function
+  b_true = c_true %*% psi_true
+  ranef_subj = b_true[subj_vec,]
+
+
+
+  if (strata_sigma == 0 & strata_scale == 0){
+    ranef_subj = sd(fixef_signal) / sd(ranef_subj) / snr_u * ranef_subj
+    lin_pred = fixef_signal + ranef_subj
+  } else {
+    # first adjust ranef subj
+    ranef_subj = sd(fixef_signal) / sd(ranef_subj) / snr_u * ranef_subj
+    # then adjust ranef psu
+    ranef_strata_psu = sd(fixef_signal) / sd(ranef_strata_psu) / snr_b * ranef_strata_psu
+    lin_pred = fixef_signal + ranef_subj + ranef_strata_psu
+  }
 
   # lin pred is n x L
   # generate outcomes
@@ -200,10 +218,10 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     sigma = sd_lp / snr_eps
     set.seed(seed)
     Y_obs = matrix(
-      rnorm(n = I * L,
+      rnorm(n = n,
             mean = as.vector(t(lin_pred)),
             sd = sigma), # need to use t to put in correct order
-      nrow = I,
+      nrow = n,
       ncol = L,
       byrow = TRUE
     )
@@ -212,11 +230,11 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     set.seed(seed)
     Y_obs  = matrix(
       rbinom(
-        n = I * L,
+        n = n,
         size = 1,
         prob = p_true
       ),
-      nrow = I,
+      nrow = n,
       ncol = L,
       byrow = TRUE
     )
@@ -224,9 +242,9 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
     lam_true = exp(as.vector(t(lin_pred)))
     set.seed(seed)
     Y_obs  = matrix(
-      rpois(n = I * L,
+      rpois(n = n,
             lambda = lam_true),
-      nrow = I,
+      nrow = n,
       ncol = L,
       byrow = TRUE
     )
@@ -237,29 +255,37 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
               stratum_assignments = stratum_assignments,
               psu_assignments = psu_assignments,
               dirichlet_probs = dirichlet_probs,
-              beta_true = beta_fixed))
+              beta_true = beta_fixed,
+              subj_vec = subj_vec,
+              visits_per_subj = visits_per_subj))
 }
 
 
 get_p_i = function(i, probs) probs[i] * (1 + sum((probs[-i]) / (1-probs[-i])))
 
 
-sample_from_population_wor = function(X_des, # design matrix
-                                      Y_obs, # y matrix
-                                      I_n = 500, # subjects in each psu-strata combination
-                                      num_strata = 30,  # total strata
-                                      stratum_assignments, # assignment to ea strata
-                                      num_selected_psu = 2,
-                                      dirichlet_probs, # stratum probabilities
-                                      psu_assignments, # assignment to psu (w/in strata)
-                                      L = 50, # length of fnl domain
-                                      seed = 1,
-                                      inf_level = 1,
-                                      compression = 3,
-                                      family = "gaussian"
+sample_from_population_wor_ml = function(X_des, # design matrix
+                                         Y_obs, # y matrix
+                                         I_n = 500, # subjects in each psu-strata combination
+                                         num_strata = 30,  # total strata
+                                         stratum_assignments, # assignment to ea strata
+                                         num_selected_psu = 2,
+                                         dirichlet_probs, # stratum probabilities
+                                         psu_assignments, # assignment to psu (w/in strata)
+                                         L = 50, # length of fnl domain
+                                         seed = 1,
+                                         inf_level = 1,
+                                         compression = 3,
+                                         family = "gaussian",
+                                         subj_vec,
+                                         visits_per_subj
 ){
-  I = nrow(X_des)
-  X1 = X_des[, 2]
+  I = length(visits_per_subj)
+
+  # get per subject means
+  rs = rowsum(Y_obs, subj_vec)
+  Y_means = rs / visits_per_subj
+
   # select strata (use all for now)
   selected_strata = 1:num_strata
   p_strata_design  = dirichlet_probs[selected_strata]
@@ -307,14 +333,14 @@ sample_from_population_wor = function(X_des, # design matrix
         inclusion_probs = rep(1 / n, n)
       } else {
         # Compute mean outcome in PSU
-        y_mean = rowMeans(Y_obs[inds_in_psu, ])
+        y_mean = rowMeans(Y_means[inds_in_psu, ])
 
         # Compute inclusion score depending on family
         incl_score = switch(family,
-                             "gaussian" = y_mean * inf_level,
-                             "poisson"  = log(y_mean) * inf_level,
-                             "binomial" = qlogis(pmin(pmax(y_mean, 1e-6), 1 - 1e-6)) * inf_level,
-                             stop("Unknown family"))
+                            "gaussian" = y_mean * inf_level,
+                            "poisson"  = log(y_mean) * inf_level,
+                            "binomial" = qlogis(pmin(pmax(y_mean, 1e-6), 1 - 1e-6)) * inf_level,
+                            stop("Unknown family"))
 
         # Apply compression and map to probabilities
         score_compressed = pmax(pmin(incl_score, compression), -compression)
@@ -342,101 +368,31 @@ sample_from_population_wor = function(X_des, # design matrix
 
   survey_weights  = 1 / p_overall
 
+  # index to get the correct entries from original weight, psu, strata, etc.
+  keep_rows = which(subj_vec %in% final_sample)
+  Y_obs_selected = Y_obs[keep_rows,]
+  subj_selected = subj_vec[keep_rows]
+
+  psu_lookup = setNames(psus, final_sample)
+
+  # get visit numbers
+  visit_num = ave(rep(1L, length(subj_selected)), subj_selected, FUN = seq_along)
+
 
   dat.sim  = data.frame(
-    ID = final_sample,
-    X = X1[final_sample],
-    strata = stratum_assignments[final_sample],
-    psu = sub(".*\\_", "", psus),
-    weight = survey_weights[final_sample],
-    p_stage1 = p1[final_sample],
-    p_stage2 = p2[final_sample]
+    ID = subj_selected,
+    X = X_des[keep_rows, 2],
+    strata = stratum_assignments[subj_selected],
+    psu = sub(".*\\_", "", psu_lookup[as.character(subj_selected)]),
+    weight = survey_weights[subj_selected],
+    p_stage1 = p1[subj_selected],
+    p_stage2 = p2[subj_selected],
+    visit = visit_num
   )
+  Y_sample = data.frame(Y_obs_selected)
 
-
-  Y_sample  = data.frame(Y_obs[final_sample, ])
   colnames(Y_sample)  = paste0("Y", 1:L)
 
   data =  cbind(dat.sim, Y_sample)
   return(data)
 }
-
-generate_population_nonsurvey = function(n = 500, # size of superpopulation
-                               L = 50, # length of functional domain
-                               scenario = 1, # shape of function
-                               family = "gaussian",
-                               seed = 4574,
-                               snr_eps = 1
-){
-  stopifnot("scenario must be either 1 or 2" = scenario %in% c(1, 2))
-  stopifnot("family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"))
-
-  grid = seq(0, 1, length = L)
-  beta_true = matrix(NA, 2, L) # time-dependent beta-true trajectory
-
-  if (scenario == 1) {
-    beta_true[1, ] = -0.15 - 0.1 * sin(2 * grid * pi) - 0.1 * cos(2 * grid *
-                                                                    pi)
-    beta_true[2, ] = dnorm(grid, .6, .15) / 20
-  } else if (scenario == 2) {
-    beta_true[1, ] = 0.53 + 0.06 * sin(3 * grid * pi) - 0.03 * cos(6.5 * grid *
-                                                                     pi)
-    beta_true[2, ] = dnorm(grid, 0.2, .1) / 60 + dnorm(grid, 0.35, .1) /
-      200 -
-      dnorm(grid, 0.65, .06) / 250 + dnorm(grid, 1, .07) / 60
-  }
-  rownames(beta_true) <- c("Intercept", "x")
-  set.seed(seed)
-  X_des = cbind(1, rnorm(n, 0, 2)) # design matrix: Intercept + predicted variables
-  true_fixef <- X_des %*% beta_true
-
-  set.seed(seed + 1)
-  if (family == "gaussian") {
-    sd_lp = sd(as.vector(true_fixef))
-    sigma = sd_lp / snr_eps
-    Y_obs <- matrix(
-      rnorm(
-        n = nrow(true_fixef) * L,
-        mean = as.vector(t(true_fixef)),
-        sd = sigma
-      ),
-      nrow = nrow(true_fixef),
-      ncol = L,
-      byrow = TRUE
-    )
-  } else if (family == "binomial") {
-    p_true = plogis(true_fixef)
-    Y_obs <- matrix(
-      rbinom(
-        n = nrow(p_true) * L,
-        size = 1,
-        prob = as.vector(t(p_true))
-      ),
-      nrow = nrow(p_true),
-      ncol = L,
-      byrow = TRUE
-    )
-  } else if (family == "poisson") {
-    lam_true <- exp(true_fixef)
-    Y_obs <- matrix(
-      rpois(n = nrow(lam_true) * L, lambda = as.vector(t(lam_true))),
-      nrow = nrow(lam_true),
-      ncol = L,
-      byrow = TRUE
-    )
-  }
-
-  dat.sim <- data.frame(
-    ID = 1:n,
-    X = X_des[,2]
-  )
-
-  # Generate fixed effects and true Y.
-  Y_df <- data.frame(Y_obs)
-  colnames(Y_df) <- paste0("Y", 1:L)
-
-  sample_data <- cbind(dat.sim, Y_df)
-
-  return(list(sample_data = sample_data, beta_true = beta_true))
-}
-
