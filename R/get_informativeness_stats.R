@@ -25,7 +25,9 @@ source(here::here("R", "00_data_gen_function_fast.R"))
 source(here::here("R", "utils.R"))
 source(here::here("R", "create_survey_settings.R"))
 
-if(!file.exists(here::here("results", "inf_level_exploration.rds"))) {
+force = TRUE
+
+if(!file.exists(here::here("results", "inf_level_exploration.rds")) || force) {
 
   lst = generate_superpopulation(
     family = "gaussian",
@@ -102,12 +104,14 @@ if(!file.exists(here::here("results", "inf_level_exploration.rds"))) {
     ratio_75 = get_ratio(data_means, 0.25, 0.75)
     ratio_9 = get_ratio(data_means, 0.1, 0.9)
 
+    cv = sd(data_means$weight) / mean(data_means$weight)
     return(tibble(c_pear = c_pear,
                   c_spear = c_spear,
                   ratio_75 = ratio_75,
                   ratio_9 = ratio_9,
                   iter = iter,
-                  inf_level = inf))
+                  inf_level = inf,
+                  cv = cv))
 
   }
 
