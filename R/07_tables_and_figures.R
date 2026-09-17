@@ -96,7 +96,7 @@ plot_mise = function(df, x_var, facet_x, facet_y, scales = "free_y", custom_labe
                    title = element_text(size = 15)) +
     theme_sub_panel(grid.major.x = element_blank(),
                     grid.minor.x = element_blank()) +
-    labs(x = xlab, y = expression(log[10]~"Mean Integrated Squared Error"), color = "Estimation Type", fill = "Estimation Type", shape = "Estimation Type") +
+    labs(x = xlab, y = expression(log[10]~"Integrated Squared Error"), color = "Estimation Type", fill = "Estimation Type", shape = "Estimation Type") +
     guides(color = guide_legend(nrow = lnr, byrow = TRUE)) +
     scale_shape_manual(values = c(1, 8))
 
@@ -145,6 +145,10 @@ png(here::here("manuscript", "figures", "mise_gaussian.png"), width = 10, height
 p1
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_gaussian_v2.png"), width = 10, height = 6, units = "in", res = 350)
+p1
+dev.off()
+
 custom_labeller = labeller(
   facet_yf = label_value,   # parse snr_blab
   facet_xf  = label_parsed     # keep inf_lab plain
@@ -155,14 +159,23 @@ p2 = all_res_g %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, snr_eps == 1, type == "Strata scaling and noise") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain")
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain")
 
 
 png(here::here("manuscript", "figures", "mise_gaussian_2panel.png"), width = 10, height = 8, units = "in", res = 350)
 p1 / p2 + plot_layout(guides = "collect", axes = "collect", heights = c(1.5, 1)) + plot_annotation(tag_level = "A") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_gaussian_2panel_v2.png"), width = 10, height = 8, units = "in", res = 350)
+p1 / p2 + plot_layout(guides = "collect", axes = "collect", heights = c(1.5, 1)) + plot_annotation(tag_level = "A") & theme(legend.position = "bottom")
+dev.off()
+
+
 png(here::here("manuscript", "figures", "mise_gaussian_int.png"), width = 10, height = 6, units = "in", res = 350)
+p2
+dev.off()
+
+png(here::here("manuscript", "figures", "mise_gaussian_int_v2.png"), width = 10, height = 6, units = "in", res = 350)
 p2
 dev.off()
 
@@ -192,6 +205,10 @@ png(here::here("manuscript", "figures", "mise_gaussian_supp.png"), width = 12, h
 p1 / p2 + plot_layout(heights = c(2, 1),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_gaussian_supp_v2.png"), width = 12, height = 8, units = "in", res = 350)
+p1 / p2 + plot_layout(heights = c(2, 1),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
 
 p1 = all_res_g %>%
   filter(var != "x") %>%
@@ -214,6 +231,11 @@ png(here::here("manuscript", "figures", "mise_gaussian_supp_int.png"), width = 1
 p1 / p2 + plot_layout(heights = c(2, 1),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_gaussian_supp_int_v2.png"), width = 12, height = 8, units = "in", res = 350)
+p1 / p2 + plot_layout(heights = c(2, 1),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
+
 custom_labeller = labeller(
   facet_yf = label_value,   # parse snr_blab
   facet_xf  = label_parsed     # keep inf_lab plain
@@ -224,7 +246,7 @@ p1 = all_res_g %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, snr_eps == 1, type == "Strata scaling and noise") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain")
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain")
 
 
 png(here::here("manuscript", "figures", "mise_gaussian_n.png"),
@@ -232,14 +254,24 @@ png(here::here("manuscript", "figures", "mise_gaussian_n.png"),
 p1
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_gaussian_n_v2.png"),
+    width = 10, height = 6, units = "in", res = 350)
+p1
+dev.off()
+
+
 p1 = all_res_g %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, snr_eps == 1, type == "Strata scaling and noise") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain")
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain")
 
 
 png(here::here("manuscript", "figures", "mise_gaussian_n_int.png"),
+    width = 10, height = 6, units = "in", res = 350)
+p1
+dev.off()
+png(here::here("manuscript", "figures", "mise_gaussian_n_int_v2.png"),
     width = 10, height = 6, units = "in", res = 350)
 p1
 dev.off()
@@ -249,14 +281,14 @@ p1 = all_res_g %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, snr_eps == 1, type == "Strata noise only") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain",
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain",
             tl = "Random effects structure: Strata/PSU noise only")
 
 p2 = all_res_g %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_eps == 1, type == "No random effects") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain",
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain",
             tl = "Random effects structure: No random effects")
   # scale_y_continuous(limits = c(-8.66, -3.23))
 
@@ -264,18 +296,23 @@ png(here::here("manuscript", "figures", "mise_gaussian_n_supp.png"), width = 12,
 p1 / p2 + plot_layout(heights = c(2, 1.25),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_gaussian_n_supp_v2.png"), width = 12, height = 8, units = "in", res = 350)
+p1 / p2 + plot_layout(heights = c(2, 1.25),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
+
 p1 = all_res_g %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, snr_eps == 1, type == "Strata noise only") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain",
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain",
             tl = "Random effects structure: Strata/PSU noise only")
 
 p2 = all_res_g %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_eps == 1, type == "No random effects") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain",
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain",
             tl = "Random effects structure: No random effects")
   # scale_y_continuous(limits = c(-8.66, -3.23))
 
@@ -283,6 +320,9 @@ png(here::here("manuscript", "figures", "mise_gaussian_n_supp_int.png"), width =
 p1 / p2 + plot_layout(heights = c(2, 1.25),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_gaussian_n_supp_int_v2.png"), width = 12, height = 8, units = "in", res = 350)
+p1 / p2 + plot_layout(heights = c(2, 1.25),  axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
 # -----  Non Gaussian plots -----
 
 p1 = all_res_ng %>%
@@ -296,19 +336,25 @@ p2 = all_res_ng %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Poisson", type == "Strata scaling and noise") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Poisson")
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Poisson")
 
 p3 = all_res_ng %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Bernoulli", type == "Strata scaling and noise") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Bernoulli")
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Bernoulli")
 
 
 png(here::here("manuscript", "figures", "mise_ng.png"),
     width = 16, height = 12, units = "in", res = 350)
 p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
+
+png(here::here("manuscript", "figures", "mise_ng_v2.png"),
+    width = 16, height = 12, units = "in", res = 350)
+p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
 
 # repeat for intercept
 p1 = all_res_ng %>%
@@ -322,19 +368,25 @@ p2 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Poisson", type == "Strata scaling and noise") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Poisson")
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Poisson")
 
 p3 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Bernoulli", type == "Strata scaling and noise") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "fixed", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Bernoulli")
+            scales = "fixed", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Bernoulli")
 
 
 png(here::here("manuscript", "figures", "mise_ng_int.png"),
     width = 16, height = 12, units = "in", res = 350)
 p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
+
+png(here::here("manuscript", "figures", "mise_ng_int_v2.png"),
+    width = 16, height = 12, units = "in", res = 350)
+p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
 
 ## varying random effects
 p1 = all_res_ng %>%
@@ -360,6 +412,12 @@ png(here::here("manuscript", "figures", "mise_ng_supp.png"),
 p1 / p3 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_ng_supp_v2.png"),
+    width = 12, height = 8, units = "in", res = 350)
+p1 / p3 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
+
 p1 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), In == 100, len == 50, type == "Strata noise only") %>%
@@ -382,6 +440,12 @@ png(here::here("manuscript", "figures", "mise_ng_supp_int.png"),
 p1 / p3 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_ng_supp_int_v2.png"),
+    width = 12, height = 8, units = "in", res = 350)
+p1 / p3 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
+
 custom_labeller = labeller(
   facet_yf = label_value,   # parse snr_blab
   facet_xf  = label_parsed
@@ -392,25 +456,25 @@ p1 = all_res_ng %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Poisson", type == "Strata noise only") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Poisson: Strata/PSU noise only")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Poisson: Strata/PSU noise only")
 
 p2 = all_res_ng %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Bernoulli", type == "Strata noise only") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Bernoulli: Strata/PSU noise only")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Bernoulli: Strata/PSU noise only")
 
 p3 = all_res_ng %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), family == "Poisson", type == "No random effects") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Poisson: No random effects")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Poisson: No random effects")
 
 p4 = all_res_ng %>%
   filter(var == "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), family == "Bernoulli", type == "No random effects") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Bernoulli: No random effects")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Bernoulli: No random effects")
 
 
 
@@ -420,29 +484,36 @@ png(here::here("manuscript", "figures", "mise_n_ng_supp.png"),
 # p1 / p2 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_n_ng_supp_v2.png"),
+    width = 16, height = 8, units = "in", res = 350)
+(p1 + p2 + plot_layout(axis_titles = "collect")) / (p3 + p4 + plot_layout(axis_titles = "collect")) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+# p1 / p2 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
+
+
 p1 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Poisson", type == "Strata noise only") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Poisson: Strata/PSU noise only")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Poisson: Strata/PSU noise only")
 
 p2 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), snr_b == 0.5, family == "Bernoulli", type == "Strata noise only") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Bernoulli: Strata/PSU noise only")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Bernoulli: Strata/PSU noise only")
 
 p3 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), family == "Poisson", type == "No random effects") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Poisson: No random effects")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Poisson: No random effects")
 
 p4 = all_res_ng %>%
   filter(var != "x") %>%
   filter(boot_type %in% c("Weighted", "Unweighted"), family == "Bernoulli", type == "No random effects") %>%
   plot_mise(x_var = "l_lab", facet_x = "n_lab", facet_y = "inf_lab",
-            scales = "free_y", custom_labeller = custom_labeller, xlab = "Length of functional domain", tl = "Bernoulli: No random effects")
+            scales = "free_y", custom_labeller = custom_labeller, xlab = "Dimension of functional domain", tl = "Bernoulli: No random effects")
 
 
 
@@ -452,6 +523,11 @@ png(here::here("manuscript", "figures", "mise_n_ng_supp_int.png"),
 # p1 / p2 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
 dev.off()
 
+png(here::here("manuscript", "figures", "mise_n_ng_supp_int_v2.png"),
+    width = 16, height = 8, units = "in", res = 350)
+(p1 + p2 + plot_layout(axis_titles = "collect")) / (p3 + p4 + plot_layout(axis_titles = "collect")) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+# p1 / p2 + plot_layout(heights = c(1, 1), axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+dev.off()
 
 # ------- coverage tables --------
 

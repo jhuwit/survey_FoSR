@@ -49,4 +49,4 @@ all_res = all_res %>%
          !(len == 1440 & family != "gaussian"))
 
 
-write_rds(all_res, here::here("results", "simulations", "all_survey_res_curr.rds"))
+write_rds(all_res, here::here("results", "simulations", "all_survey_res.rds"))

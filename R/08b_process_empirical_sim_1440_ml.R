@@ -116,7 +116,7 @@ p2 = res_df %>%
   theme_sub_axis(text= element_text(size = 10),
                  title = element_text(size = 13)) +
   guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
-  labs(x = "Weighting Scheme",y = expression(log[10]~"Mean Integrated Squared Error"), color = "Estimation Type", fill = "Estimation Type", shape = "Estimation Type") +
+  labs(x = "Weighting Scheme",y = expression(log[10]~"Integrated Squared Error"), color = "Estimation Type", fill = "Estimation Type", shape = "Estimation Type") +
   guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
   theme_sub_axis_x(text = element_text(angle = 30))
 

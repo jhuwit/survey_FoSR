@@ -32,7 +32,7 @@ if(!file.exists(here::here("results", "inf_level_exploration.rds")) || force) {
   lst = generate_superpopulation(
     family = "gaussian",
     I = 10e6,
-    L = 100,
+    L = 50,
     snr_b = 0.5,
     snr_eps = 1,
     strata_sigma = 0.125,
@@ -58,7 +58,7 @@ if(!file.exists(here::here("results", "inf_level_exploration.rds")) || force) {
 
   get_stats = function(inf, iter = 1) {
     fold = settings |>
-      filter(family == "gaussian", strata_scale > 0, strata_sigma > 0, snr_b == 0.5, snr_eps == 1, len == 100, In == 100, inf_level == inf) |>
+      filter(family == "gaussian", strata_scale > 0, strata_sigma > 0, snr_b == 0.5, snr_eps == 1, len == 50, In == 100, inf_level == inf) |>
       pull(fold)
 
     temp = settings[fold,]
@@ -139,7 +139,7 @@ p1 =
   scale_x_discrete(labels = c("Pearson", "Spearman"), name = "Correlation type") +
   scale_y_continuous(name = "Correlation") +
   labs(title = "Correlation between mean functional outcome and selection probability",
-       subtitle = "Baseline settings, 200 iterations") +
+       subtitle = "Baseline settings, 100 iterations") +
   scale_fill_manual(values = c("#FFE099FF", "#F76D5EFF", "#A50021FF"),
                     name = "Informativeness", labels = c("Uniform", "Medium", "High")) +
   geom_hline(aes(yintercept = 0), linetype = "dashed") +
@@ -166,3 +166,26 @@ res |>
   theme(legend.position = c(.9, .3))
 
 
+# make 3 panel figure:
+p1 =
+  res |>
+  pivot_longer(cols = c(ratio_75, cv, c_spear))  |>
+  mutate(name = factor(name, levels = c("c_spear", "ratio_75", "cv"),
+                       labels = c("Spearman correlation between\nweight and selection probability", "Ratio of selection probabilities:\n75th:25th weight percentile",
+                                  "Coefficient of variation in weights"))) |>
+  ggplot(aes(x = factor(inf_level), y = value, fill = factor(inf_level))) +
+  geom_boxplot() +
+  scale_x_discrete(labels = c("Uniform", "Medium", "High")) +
+  facet_wrap(.~name, nrow = 1, scales = "free") +
+  theme_light(base_size = 14) +
+  labs(x = "Informativeness Level", y = "Value", title = "Contextualizing informative sampling") +
+  scale_fill_manual(values = c("#FFE099FF", "#F76D5EFF", "#A50021FF")) +
+  theme(legend.position = "none")
+
+png(here::here("manuscript", "figures", "informativeness.png"), width = 10, height = 6, units = "in", res = 350)
+p1
+dev.off()
+
+res |>
+  group_by(inf_level) |>
+  summarize(across(-iter, median))

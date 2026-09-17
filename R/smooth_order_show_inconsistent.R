@@ -172,6 +172,11 @@ run_sim_fixed_edf = function(n = 500, n_iter = 50, parallel = TRUE, L = 50){
   sf_gcv_mean = apply(sf_array, c(1, 2), mean)
   sf_fixed_mean = apply(sff_array, c(1, 2), mean)
 
+  # SD
+  ss_sd = apply(ss_array, c(1, 2), sd)
+  sf_sd = apply(sf_array, c(1, 2), sd)
+  sff_sd = apply(sff_array, c(1, 2), sd)
+
   # Bias
   ss_bias = ss_mean - bt
   sf_gcv_bias = sf_gcv_mean - bt
@@ -184,7 +189,7 @@ run_sim_fixed_edf = function(n = 500, n_iter = 50, parallel = TRUE, L = 50){
     for(l in 1:L){
       ss_coverage[j, l] = mean(abs(ss_array[j, l, ] - bt[j, l]) < 1.96 * ss_sd[j, l])
       sf_coverage[j, l] = mean(abs(sf_array[j, l, ] - bt[j, l]) < 1.96 * sf_sd[j, l])
-      sff_coverage[j, l] = mean(abs(sff_array[j, l, ] - bt[j, l]) < 1.96 * sf_sd[j, l])
+      sff_coverage[j, l] = mean(abs(sff_array[j, l, ] - bt[j, l]) < 1.96 * sff_sd[j, l])
 
     }
   }
@@ -285,243 +290,27 @@ if (!file.exists(here::here("results", "simulations", "smooth_order_consistency.
 
   write_rds(n_result, here::here("results", "simulations", "smooth_order_consistency.rds"))
 
-  n_result = map(.x = c(500, 1000, 5000, 10000),
+
+}
+
+if (!file.exists(here::here("results", "simulations", "smooth_order_fix_edf.rds")) || force){
+  n_result = map(.x = c(500, 1000, 5000),
                  .f = run_sim_fixed_edf,
                  n_iter = 200,
                  parallel = TRUE)
 
-} else n_result = read_rds(here::here("results", "simulations", "smooth_order_consistency.rds"))
+  n_result =
+    n_result |> bind_rows(.id = "n")
+
+  n_result =
+    n_result |>
+    mutate(n = case_when(n == "1" ~ 500,
+                         n == "2" ~ 1000,
+                         n == "3" ~ 5000,
+                         .default = 10000))
+
+  write_rds(n_result, here::here("results", "simulations", "smooth_order_fix_edf.rds"))
 
 
-######
-# make plots
-######
-L = 50
-beta_fixed  = matrix(NA, 2, L)
-beta_fixed[1, ]  = -0.15 - 0.1 * sin(2 * pi * grid) - 0.1 * cos(2 * pi * grid)
-beta_fixed[2, ]  = dnorm(grid, 0.6, 0.15) / 20
+}
 
-bt_df =
-  beta_fixed |>
-  as_tibble() |>
-  mutate(var = c("b0", "b1")) |>
-  pivot_longer(cols = -var, names_to = "s", names_transform = ~as.numeric(sub(".*V", "", .x)))
-
-n_result |>
-  pivot_longer(cols = contains("b")) |>
-  filter(grepl("bias", name)) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b1") |>
-  mutate(smooth_order = factor(smooth_order, labels = c("Smooth first", "Smooth second"))) |>
-  ggplot(aes(x = s, y = value, color = factor(n))) +
-  geom_line() +
-  facet_wrap(.~smooth_order) +
-  labs(x = "Functional Domain", y = "Bias", title = bquote("Bias for"~beta[1])) +
-  geom_hline(aes(yintercept = 0), linetype = "dashed", color = "darkgrey") +
-  # scale_color_viridis_d(name = "Sample size", option = "B") +
-  scale_color_manual(values = c("#FF7F00FF", "#19B2FFFF", "#654CFFFF", "#E51932FF"), name = "Sample Size") +
-  theme(legend.position = c(0.9, 0.2))
-
-n_result |>
-  pivot_longer(cols = contains("b")) |>
-  filter(grepl("bias", name)) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b1") |>
-  mutate(smooth_order = factor(smooth_order, labels = c("Smooth first", "Smooth second"))) |>
-  ggplot(aes(x = s, y = value, color = factor(n))) +
-  geom_line() +
-  facet_wrap(.~smooth_order, scales = "free_y") +
-  labs(x = "Functional Domain", y = "Bias", title = bquote("Bias for"~beta[1])) +
-  geom_hline(aes(yintercept = 0), linetype = "dashed", color = "darkgrey") +
-  # scale_color_viridis_d(name = "Sample size", option = "B") +
-  scale_color_manual(values = c("#FF7F00FF", "#19B2FFFF", "#654CFFFF", "#E51932FF"), name = "Sample Size") +
-  theme(legend.position = c(0.9, 0.2))
-
-
-n_result |>
-  pivot_longer(cols = contains("b")) |>
-  filter(grepl("bias", name)) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b0") |>
-  mutate(smooth_order = factor(smooth_order, labels = c("Smooth first", "Smooth second"))) |>
-  ggplot(aes(x = s, y = value, color = factor(n))) +
-  geom_line() +
-  facet_wrap(.~smooth_order) +
-  labs(x = "Functional Domain", y = "Bias", title = bquote("Bias for"~beta[0])) +
-  geom_hline(aes(yintercept = 0), linetype = "dashed", color = "darkgrey") +
-  # scale_color_viridis_d(name = "Sample size", option = "B") +
-  scale_color_manual(values = c("#FF7F00FF", "#19B2FFFF", "#654CFFFF", "#E51932FF"), name = "Sample Size") +
-  theme(legend.position = c(0.9, 0.2))
-
-n_result |>
-  pivot_longer(cols = contains("b")) |>
-  filter(grepl("bias", name)) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b0") |>
-  mutate(smooth_order = factor(smooth_order, labels = c("Smooth first", "Smooth second"))) |>
-  ggplot(aes(x = s, y = value, color = factor(n))) +
-  geom_line() +
-  facet_wrap(.~smooth_order, scales = "free_y") +
-  labs(x = "Functional Domain", y = "Bias", title = bquote("Bias for"~beta[0])) +
-  geom_hline(aes(yintercept = 0), linetype = "dashed", color = "darkgrey") +
-  # scale_color_viridis_d(name = "Sample size", option = "B") +
-  scale_color_manual(values = c("#FF7F00FF", "#19B2FFFF", "#654CFFFF", "#E51932FF"), name = "Sample Size") +
-  theme(legend.position = c(0.9, 0.2))
-
-n_result |>
-  filter(n == 1000) |>
-  select(s, contains("mean")) |>
-  pivot_longer(cols = -s)  |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b0") |>
-  ggplot(aes(x = s, y = value, color = smooth_order)) +
-  geom_line(linewidth = .8) +
-  geom_line(data = bt_df |> filter(var == "b0") |> mutate(smooth_order = "truth"), linewidth = .8) +
-  scale_color_manual(values = c("#E69F00FF", "#0072B2FF", "darkgrey"), name = "",
-                     labels = c("Smooth First", "Smooth Second", "Truth")) +
-  labs(x = "Functional Domain", y = "Value", title = bquote("True and estimated"~beta[0])) +
-  theme(legend.position = c(0.8, 0.2),
-        legend.title = element_blank())
-
-n_result |>
-  filter(n == 1000) |>
-  select(s, contains("mean")) |>
-  pivot_longer(cols = -s)  |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b1") |>
-  ggplot(aes(x = s, y = value, color = smooth_order)) +
-  geom_line(linewidth = .8) +
-  geom_line(data = bt_df |> filter(var == "b1") |> mutate(smooth_order = "truth"), linewidth = .8) +
-  scale_color_manual(values = c("#E69F00FF", "#0072B2FF", "darkgrey"), name = "",
-                     labels = c("Smooth First", "Smooth Second", "Truth")) +
-  labs(x = "Functional Domain", y = "Value", title = bquote("True and estimated"~beta[1])) +
-  theme(legend.position = c(0.6, 0.2),
-        legend.title = element_blank())
-
-
-n_result |>
-  filter(n == 1000) |>
-  select(s, contains("cover")) |>
-  pivot_longer(cols = -s)  |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b0") |>
-  ggplot(aes(x = s, y = value, color = smooth_order)) +
-  geom_line(linewidth = 1) +
-  scale_color_manual(values = c("#E69F00FF", "#0072B2FF"), name = "",
-                     labels = c("Smooth First", "Smooth Second")) +
-  labs(x = "Functional Domain", y = "Pointwise coverage", title = bquote("Empirical coverage for"~beta[0]~"at n = 1000")) +
-  theme(legend.position = "bottom",
-        legend.title = element_blank()) +
-  geom_hline(aes(yintercept = 0.95), color = "darkgrey", linetype = "dashed") +
-  annotate(geom = "text", label = "Nominal coverage rate = 0.95", x = 5, y = .95, color = "darkgrey", size = 3, vjust = -1)
-
-n_result |>
-  filter(n == 1000) |>
-  select(s, contains("cover")) |>
-  pivot_longer(cols = -s)  |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b1") |>
-  ggplot(aes(x = s, y = value, color = smooth_order)) +
-  geom_line(linewidth = 1) +
-  scale_color_manual(values = c("#E69F00FF", "#0072B2FF"), name = "",
-                     labels = c("Smooth First", "Smooth Second")) +
-  labs(x = "Functional Domain", y = "Pointwise coverage", title = bquote("Empirical coverage for"~beta[1]~"at n = 1000")) +
-  theme(legend.position = "bottom",
-        legend.title = element_blank()) +
-  geom_hline(aes(yintercept = 0.95), color = "darkgrey", linetype = "dashed") +
-  annotate(geom = "text", label = "Nominal coverage rate = 0.95", x = 5, y = .95, color = "darkgrey", size = 3, vjust = -1)
-
-# First, get the bias data and determine scaling
-bias_data = n_result |>
-  filter(n == 1000) |>
-  select(s, contains("bias")) |>
-  pivot_longer(cols = -s) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b1")
-
-# Scaling parameters: map bias range to ~[0, 0.5] so it doesn't overlap too much with coverage
-bias_range = range(bias_data$value)
-scale_factor = 0.4 / max(abs(bias_range))  # scale to fit in lower part of plot
-offset = 0.5  # center the bias around 0.5 on the primary axis
-
-# Coverage data
-cover_data = n_result |>
-  filter(n == 1000) |>
-  select(s, contains("cover")) |>
-  pivot_longer(cols = -s) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b1")
-
-# Plot
-ggplot() +
-  # Coverage lines (primary axis)
-  geom_line(data = cover_data,
-            aes(x = s, y = value, color = smooth_order),
-            linewidth = 1) +
-  # Bias lines (scaled to primary axis)
-  geom_line(data = bias_data,
-            aes(x = s, y = value * scale_factor + offset, linetype = smooth_order),
-            color = "grey40", linewidth = 0.8) +
-  scale_color_manual(values = c("#E69F00FF", "#0072B2FF"), name = "Coverage",
-                     labels = c("Smooth First", "Smooth Second")) +
-  scale_linetype_manual(values = c("solid", "dashed"), name = "Bias",
-                        labels = c("Smooth First", "Smooth Second")) +
-  scale_y_continuous(
-    name = "Pointwise coverage",
-    limits = c(0, 1),
-    sec.axis = sec_axis(~ (. - offset) / scale_factor, name = "Bias")
-  ) +
-  labs(x = "Functional Domain",
-       title = bquote("Empirical coverage for" ~ beta[1] ~ "at n = 1000")) +
-  geom_hline(yintercept = 0.95, color = "darkgrey", linetype = "dashed") +
-  geom_hline(yintercept = offset, color = "grey40", linetype = "dotted", alpha = 0.5) +  # zero line for bias
-  annotate(geom = "text", label = "Nominal = 0.95", x = 5, y = 0.95,
-           color = "darkgrey", size = 3, vjust = -1) +
-  theme(legend.position = "bottom")
-
-bias_data = n_result |>
-  filter(n == 1000) |>
-  select(s, contains("bias")) |>
-  pivot_longer(cols = -s) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b0")
-
-# Scaling parameters: map bias range to ~[0, 0.5] so it doesn't overlap too much with coverage
-bias_range = range(bias_data$value)
-scale_factor = 0.4 / max(abs(bias_range))  # scale to fit in lower part of plot
-offset = 0.5  # center the bias around 0.5 on the primary axis
-
-# Coverage data
-cover_data = n_result |>
-  filter(n == 1000) |>
-  select(s, contains("cover")) |>
-  pivot_longer(cols = -s) |>
-  separate_wider_delim(cols = name, delim = "_", names = c("smooth_order", "xx", "var")) |>
-  filter(var == "b0")
-
-# Plot
-ggplot() +
-  # Coverage lines (primary axis)
-  geom_line(data = cover_data,
-            aes(x = s, y = value, color = smooth_order),
-            linewidth = 1) +
-  # Bias lines (scaled to primary axis)
-  geom_line(data = bias_data,
-            aes(x = s, y = value * scale_factor + offset, linetype = smooth_order),
-            color = "grey40", linewidth = 0.8) +
-  scale_color_manual(values = c("#E69F00FF", "#0072B2FF"), name = "Coverage",
-                     labels = c("Smooth First", "Smooth Second")) +
-  scale_linetype_manual(values = c("solid", "dashed"), name = "Bias",
-                        labels = c("Smooth First", "Smooth Second")) +
-  scale_y_continuous(
-    name = "Pointwise coverage",
-    limits = c(0, 1),
-    sec.axis = sec_axis(~ (. - offset) / scale_factor, name = "Bias")
-  ) +
-  labs(x = "Functional Domain",
-       title = bquote("Empirical coverage for" ~ beta[0] ~ "at n = 1000")) +
-  geom_hline(yintercept = 0.95, color = "darkgrey", linetype = "dashed") +
-  geom_hline(yintercept = offset, color = "grey40", linetype = "dotted", alpha = 0.5) +  # zero line for bias
-  annotate(geom = "text", label = "Nominal = 0.95", x = 5, y = 0.95,
-           color = "darkgrey", size = 3, vjust = -1) +
-  theme(legend.position = "bottom")
