@@ -240,6 +240,237 @@ generate_superpopulation = function(I = 10e6, # size of superpopulation
               beta_true = beta_fixed))
 }
 
+generate_superpopulation_ar1 = function(I = 10e6, # size of superpopulation
+                                    L = 50, # length of functional domain
+                                    family = "gaussian",
+                                    seed = 4574,
+                                    num_strata = 30, # num total strata
+                                    strata_sigma = 0.05,
+                                    psu_factor = 0.5,
+                                    strata_scale = 0.125, # strata scaling factor
+                                    snr_b = 1, # signal noise ratio for random to fixed effects
+                                    snr_eps = 1, # signal to noise for gaussian
+                                    ar1_rho = 0.1
+){
+  stopifnot("family must be either 'gaussian', 'poisson', or 'binomial'" = family %in% c("gaussian", "poisson", "binomial"),
+            "I must be greater than 1000" = I > 1000,
+            "L must be greater than or equal to 25" = L >= 25,
+            "num_strata must be greater than 0" = num_strata > 0,
+            "strata_sigma, psu_factor and strata_scale must be greater than or equal to 0" = all(c(strata_sigma, psu_factor, strata_scale) >= 0),
+            "signal to noise ratios must be greater than 0" = snr_b > 0 | is.na(snr_b),
+            "signal to noise ratios must be greater than 0" = snr_eps > 0 | is.na(snr_eps))
+
+
+  set.seed(seed)
+  X_des  = cbind(1, rnorm(I, 0, 2))
+
+  ## simulate true beta based on scenarios
+  grid  = seq(0, 1, length = L)
+  beta_fixed  = matrix(NA, 2, L)
+  beta_fixed[1, ]  = -0.15 - 0.1 * sin(2 * pi * grid) - 0.1 * cos(2 * pi * grid)
+  beta_fixed[2, ]  = dnorm(grid, 0.6, 0.15) / 20
+
+  rownames(beta_fixed)  = c("Intercept", "x")
+
+  ## assign individuals to strata
+  set.seed(seed)
+  dirichlet_probs  = gtools::rdirichlet(1, rep(4, num_strata)) # generate dirichlet probabilities
+  set.seed(seed)
+  stratum_assignments  = sample(1:num_strata, I, replace = TRUE, prob = dirichlet_probs) # generate stratum assignments
+  psu_assignments  = rep(NA, I)
+
+  # assign individuals to PSUs - between 75 and 125 psus per stratum
+  for (s in 1:num_strata) {
+    set.seed(seed + s)
+    num_in_strata = sum(stratum_assignments == s)
+    num_psu = round(runif(1, 75, 125), 0)
+    set.seed(seed + s)
+    dps = gtools::rdirichlet(1, rep(10, num_psu))
+    set.seed(seed + s)
+    psu_in_stratum = sample(1:num_psu,
+                            num_in_strata,
+                            replace = TRUE,
+                            prob = dps)
+    psu_assignments[stratum_assignments == s]  = paste0(s, "_", psu_in_stratum)
+  }
+
+  # case where there's no strata-specific noise
+  if (strata_sigma == 0 & strata_scale == 0){
+    lin_pred  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) + X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+  } else if (strata_sigma == 0 & strata_scale > 0) {
+    set.seed(seed)
+    stratum_scaling  = rnorm(num_strata, mean = 1, sd = strata_scale)
+
+    beta1_by_stratum  = matrix(rep(stratum_scaling, each = L), nrow = num_strata) *
+      matrix(rep(beta_fixed[2, ], times = num_strata),
+             nrow = num_strata,
+             byrow = TRUE)
+
+    # assign to individuals
+    beta1_by_indiv  = beta1_by_stratum[stratum_assignments, ]
+    fixef_signal  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+
+    slope_re  = (stratum_scaling[stratum_assignments] - 1) *
+      matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    ranef  = slope_re
+    ranef  = sd(as.vector(fixef_signal)) / sd(as.vector(ranef)) / snr_b * ranef
+    rm(slope_re)
+    lin_pred = fixef_signal + ranef
+
+  } else if (strata_sigma > 0 & strata_scale == 0) {
+    psu_sigma = sqrt(strata_sigma ^ 2 * psu_factor)
+
+    ## create psu and strata-specific random effects
+    nbasis  = 5
+    basis  = fda::create.bspline.basis(c(0, 1), nbasis)
+    Phi  = fda::eval.basis(grid, basis)
+
+    set.seed(seed)
+    strata_scores  = matrix(rnorm(num_strata * nbasis, 0, strata_sigma), num_strata, nbasis)
+    strata_random_effects  = strata_scores %*% t(Phi)
+
+    total_psu = length(unique(psu_assignments))
+
+    set.seed(seed)
+    psu_scores  = matrix(
+      rnorm(total_psu * nbasis, 0, psu_sigma),
+      total_psu,
+      nbasis
+    )
+    psu_random_effects  = psu_scores %*% t(Phi)
+
+
+    strata_effects_indiv  = strata_random_effects[stratum_assignments, ]
+    psu_effects_indiv  = psu_random_effects[as.numeric(factor(psu_assignments)), ]
+    random_effects  = strata_effects_indiv + psu_effects_indiv
+
+    rm(strata_effects_indiv, psu_effects_indiv)
+
+    fixef_signal  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    ranef  = sd(as.vector(fixef_signal)) / sd(as.vector(random_effects)) / snr_b * random_effects
+    rm(random_effects)
+    lin_pred = fixef_signal + ranef
+
+  } else { # random effects and slope modification
+    psu_sigma = sqrt(strata_sigma ^ 2 * psu_factor)
+
+    ## create psu and strata-specific random effects
+    nbasis  = 5
+    basis  = fda::create.bspline.basis(c(0, 1), nbasis)
+    Phi  = fda::eval.basis(grid, basis)
+
+    set.seed(seed)
+    strata_scores  = matrix(rnorm(num_strata * nbasis, 0, strata_sigma), num_strata, nbasis)
+    strata_random_effects  = strata_scores %*% t(Phi)
+
+    total_psu = length(unique(psu_assignments))
+
+    set.seed(seed)
+    psu_scores  = matrix(
+      rnorm(total_psu * nbasis, 0, psu_sigma),
+      total_psu,
+      nbasis
+    )
+    psu_random_effects  = psu_scores %*% t(Phi)
+
+
+    strata_effects_indiv  = strata_random_effects[stratum_assignments, ]
+    psu_effects_indiv  = psu_random_effects[as.numeric(factor(psu_assignments)), ]
+    random_effects  = strata_effects_indiv + psu_effects_indiv
+
+    rm(strata_effects_indiv, psu_effects_indiv)
+
+    ## add stratum-specific slope modifications
+    set.seed(seed)
+    stratum_scaling  = rnorm(num_strata, mean = 1, sd = strata_scale)
+
+    beta1_by_stratum  = matrix(rep(stratum_scaling, each = L), nrow = num_strata, byrow = TRUE) *
+      matrix(rep(beta_fixed[2, ], times = num_strata),
+             nrow = num_strata,
+             byrow = TRUE)
+
+    # assign to individuals
+    beta1_by_indiv  = beta1_by_stratum[stratum_assignments, ]
+
+    # adjust random effect based on signal to noise parameters
+    fixef_signal  = matrix(rep(beta_fixed[1, ], I), nrow = I, byrow = TRUE) +
+      X_des[, 2] * matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+
+    # include stratum-specific slope variation in the random effects
+    slope_re  = (stratum_scaling[stratum_assignments] - 1) *
+      matrix(rep(beta_fixed[2, ], I), nrow = I, byrow = TRUE)
+    ranef  = slope_re + random_effects
+    ranef  = sd(as.vector(fixef_signal)) / sd(as.vector(ranef)) / snr_b * ranef
+    rm(random_effects)
+    lin_pred = fixef_signal + ranef
+  }
+
+
+  # temp = matrix(c(1, 2, 3, 4, 5, 6), ncol = 3, byrow = TRUE) # making sure I am doing dimensions right!
+  # matrix(rnorm(n = 6, mean = as.vector(t(temp)), sd = .001), nrow = 2, ncol = 3, byrow = TRUE)
+
+  # temp = matrix(c(10, -5, 10, -5, -5, 10), ncol = 3, byrow = TRUE) # making sure I am doing dimensions right!
+  # matrix(rbinom(n = 6, size = 1, prob = plogis(as.vector(t(temp)))), nrow = 2, ncol = 3, byrow = TRUE)
+  # rbinom(n = 6, size = 1, prob = plogis(as.vector(t(temp))))
+
+  # lin pred is n x L
+  # generate outcomes
+  if (family == "gaussian") {
+    sd_lp = sd(as.vector(lin_pred))
+    sigma = sd_lp / snr_eps
+    # AR(1) correlation matrix across L
+    sigma_ar1 = sigma^2 * ar1_rho^abs(outer(1:L, 1:L, "-"))
+
+    set.seed(seed)
+    # Draw n independent multivariate normal error vectors, each of length L
+    errors = mvtnorm::rmvnorm(n = nrow(lin_pred),
+                               mean = rep(0, L),
+                               sigma = sigma_ar1)
+    Y_obs = lin_pred + errors
+
+    # set.seed(seed)
+    # Y_obs2 = matrix(
+    #   rnorm(n = I * L,
+    #         mean = as.vector(t(lin_pred)),
+    #         sd = sigma), # need to use t to put in correct order
+    #   nrow = I,
+    #   ncol = L,
+    #   byrow = TRUE
+    # )
+  } else if(family == "binomial") {
+    p_true = plogis(as.vector(t(lin_pred)))
+    set.seed(seed)
+    Y_obs  = matrix(
+      rbinom(
+        n = I * L,
+        size = 1,
+        prob = p_true
+      ),
+      nrow = I,
+      ncol = L,
+      byrow = TRUE
+    )
+  } else if (family == "poisson"){
+    lam_true = exp(as.vector(t(lin_pred)))
+    set.seed(seed)
+    Y_obs  = matrix(
+      rpois(n = I * L,
+            lambda = lam_true),
+      nrow = I,
+      ncol = L,
+      byrow = TRUE
+    )
+  }
+
+  return(list(Y_obs = Y_obs,
+              X_des = X_des,
+              stratum_assignments = stratum_assignments,
+              psu_assignments = psu_assignments,
+              dirichlet_probs = dirichlet_probs,
+              beta_true = beta_fixed))
+}
 
 get_p_i = function(i, probs) probs[i] * (1 + sum((probs[-i]) / (1-probs[-i])))
 

@@ -208,7 +208,7 @@ run_sim_fixed_edf = function(n = 500, n_iter = 50, parallel = TRUE, L = 50){
     sff_bias_b0 = sf_fixed_bias[1,],
     sff_bias_b1 = sf_fixed_bias[2,],
     ss_edf = mean_ss_edf,
-    sff_edf = mean_sf_edf_gcv,
+    sf_edf = mean_sf_edf_gcv,
     ss_cover_b0 = ss_coverage[1,],
     ss_cover_b1 = ss_coverage[2,],
     sf_cover_b0 = sf_coverage[1,],
@@ -293,6 +293,7 @@ if (!file.exists(here::here("results", "simulations", "smooth_order_consistency.
 
 }
 
+
 if (!file.exists(here::here("results", "simulations", "smooth_order_fix_edf.rds")) || force){
   n_result = map(.x = c(500, 1000, 5000),
                  .f = run_sim_fixed_edf,
@@ -313,4 +314,7 @@ if (!file.exists(here::here("results", "simulations", "smooth_order_fix_edf.rds"
 
 
 }
+
+
+
 

@@ -352,7 +352,8 @@ dev.off()
 
 png(here::here("manuscript", "figures", "mise_ng_v2.png"),
     width = 16, height = 12, units = "in", res = 350)
-p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+(p1 | (p2 / p3)) + plot_layout(axis_titles = "collect", guides = "collect") + plot_annotation(tag_levels = "A") & theme(legend.position = "bottom")
+# p1 | (p2  / p3) + plot_layout(axis_titles = "collect", guides = "collect") + plot_annotation(tag_levels = "A") & theme(legend.position = "bottom")
 dev.off()
 
 
