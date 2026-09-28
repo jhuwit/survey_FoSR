@@ -314,6 +314,7 @@ sample_from_population_wor_ml = function(X_des, # design matrix
 
 
   ## now add visits/etc.
+  grid  = seq(0, 1, length = L)
   psi_true = matrix(NA, 2, L)
   psi_true[1,] = (1.5 - sin(2*grid*pi) - cos(2*grid*pi) )
   psi_true[1,] = psi_true[1,] / sqrt(sum(psi_true[1,]^2))
