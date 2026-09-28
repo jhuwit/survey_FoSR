@@ -11,6 +11,7 @@ ff = here::here("results", "simulations", "smooth_order_consistency.rds")
 if (!file.exists(ff)) source(here::here("R", "smooth_order_show_inconsistent.R")) else n_result = read_rds(ff)
 
 L = 50
+grid  = seq(0, 1, length = L)
 beta_fixed  = matrix(NA, 2, L)
 beta_fixed[1, ]  = -0.15 - 0.1 * sin(2 * pi * grid) - 0.1 * cos(2 * pi * grid)
 beta_fixed[2, ]  = dnorm(grid, 0.6, 0.15) / 20
@@ -156,7 +157,7 @@ p1 = ggplot() +
             aes(x = s, y = value * scale_factor + offset, linetype = smooth_order),
             color = "grey40", linewidth = 0.8) +
   scale_color_manual(values = c("#E69F00FF", "#0072B2FF"), name = "Coverage",
-                     labels = c("Smooth sirst", "Smooth second")) +
+                     labels = c("Smooth first", "Smooth second")) +
   scale_linetype_manual(values = c("solid", "dashed"), name = "Bias",
                         labels = c("Smooth first", "Smooth second")) +
   scale_y_continuous(
@@ -203,7 +204,7 @@ p2 = ggplot() +
             aes(x = s, y = value * scale_factor + offset, linetype = smooth_order),
             color = "grey40", linewidth = 0.8) +
   scale_color_manual(values = c("#E69F00FF", "#0072B2FF"), name = "Coverage",
-                     labels = c("Smooth sirst", "Smooth second")) +
+                     labels = c("Smooth first", "Smooth second")) +
   scale_linetype_manual(values = c("solid", "dashed"), name = "Bias",
                         labels = c("Smooth first", "Smooth second")) +
   scale_y_continuous(

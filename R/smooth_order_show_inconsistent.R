@@ -38,6 +38,7 @@ generate_data = function(I = 1000, seed = 2213, L = 50, sd = 2, snr_eps = 1){
               bt = beta_fixed))
 }
 
+
 # function to calculate bias from smooth first and smooth second processes
 calculate_bias = function(I, L = 50, nknots = min(50/2, 35), seed) {
   data = generate_data(I = I, L = L, seed = seed)
@@ -63,6 +64,7 @@ calculate_bias = function(I, L = 50, nknots = min(50/2, 35), seed) {
               beta_hat_sf = beta_hat_sf,
               bt = bt))
 }
+
 
 # function to calculate bias when we use the right EDF
 calculate_bias_fixed_edf = function(I, L = 50, nknots = min(50/2, 35), seed, target_edf = NULL) {
@@ -272,11 +274,13 @@ run_sim = function(n = 500, n_iter = 50, parallel = TRUE, L = 50){
                 ))
 }
 
+
 if (!file.exists(here::here("results", "simulations", "smooth_order_consistency.rds")) || force){
   n_result = map(.x = c(500, 1000, 5000, 10000),
                  .f = run_sim,
                  n_iter = 200,
                  parallel = TRUE)
+
 
   n_result =
     n_result |> bind_rows(.id = "n")
