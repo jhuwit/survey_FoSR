@@ -180,4 +180,15 @@ if (!all(file.exists(c(mims_ml, mims_sl)))) {
 }
 
 
+## write out days per subj
+mims_ml = read_rds(here::here("data", "processed_mims_multilevel.rds"))
 
+n_days =
+  mims_ml |>
+  group_by(SEQN) |>
+  summarize(n_days = n()) |>
+  mutate(SEQN = as.character(SEQN)) |>
+  ungroup()
+
+
+write_rds(n_days, here::here("data", "valid_days_per_subj.rds"))

@@ -6,15 +6,8 @@ library(svyfosr)
 pa_df = read_rds(here::here("data", "mims_covariates.rds")) %>%
   mutate(SEQN = as.character(SEQN))
 
-write_rds(pa_df, here::here("data", "mc2.rds"), compress = "xz")
-mims_ml = read_rds(here::here("data", "processed_mims_multilevel.rds"))
 
-write_rds(mims_ml, here::here("ml2.rds"), compress = "xz")
-n_days =
-  mims_ml |>
-  group_by(SEQN) |>
-  summarize(n_days = n()) |>
-  mutate(SEQN = as.character(SEQN))
+n_days = read_rds(here::here("data", "valid_days_per_subj.rds"))
 
 pa_df =
   pa_df |>
