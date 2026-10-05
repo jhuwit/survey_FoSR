@@ -102,3 +102,4 @@ Rnosave 08a_run_sim_empirical_1440_ml.R -J EMP_SIM_ML --array=1-800 --mem=15G --
 
 
 Rnosave 03b_run_survey_sim_ar1.R -J SS_AR --mem=50G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=standard --account=koffman_lab --array=241,243,245,535,537,539,541,543,545
+Rnosave 03_run_survey_sim_ml_v2.R -J SS_ML --mem=50G --cpus-per-task=5 --ntasks=1 --nodes=1 -o eofiles/%x_%A_%a.out -e eofiles/%x_%A_%a.err  --mail-type=FAIL,END --mail-user=koffman@virginia.edu --partition=standard --account=koffman_lab --array=1-100

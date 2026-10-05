@@ -141,8 +141,8 @@ if (!all(file.exists(c(mims_ml, mims_sl)))) {
       bind_cols(mims_mat_filt2)
 
 
-    write_rds(steps_final, here::here("data", "processed_steps_multilevel.rds"))
-    write_rds(mims_final, mims_ml)
+    write_rds(steps_final, here::here("data", "processed_steps_multilevel.rds"), compress = "xz")
+    write_rds(mims_final, mims_ml, compress = "xz")
 
     mims_persub =
       mims_final %>%
@@ -176,7 +176,7 @@ if (!all(file.exists(c(mims_ml, mims_sl)))) {
              full_sample_2_year_mec_exam_weight, race_hispanic_origin,
              cat_bmi, starts_with("min_"))
 
-    write_rds(pa_df_persub, mims_sl)
+    write_rds(pa_df_persub, mims_sl, compress = "xz")
 }
 
 
